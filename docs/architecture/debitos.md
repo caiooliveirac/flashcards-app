@@ -9,3 +9,4 @@ Registro contínuo (convenção do plano — atualizar a cada fase).
 3. **`notes.ai_generation_id` sem FK** — FK real entra na migration da Fase 5 (expand-and-contract), idem `review_logs.study_session_id` na Fase 3.
 4. **Dark mode**: tokens prontos em `globals.css`, mas sem toggle/aplicação da classe `.dark` (UI de tema entra na Fase 2 com o design system real).
 5. **Dev local usa Postgres 18** (Homebrew) vs 16 em produção/CI — CI é a referência; nenhuma feature específica de versão em uso.
+6. **SHAs das actions do CI apontam builds Node 20** (herdados do `plantoes`; GitHub anota depreciação e força Node 24). Atualizar os pins para as releases atuais de checkout/setup-node/pnpm-action na próxima mexida no workflow.
