@@ -4,24 +4,43 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NoteContent } from "@/lib/content";
 import { renderBlocks, renderNoteContent } from "@/lib/render";
-import { nextReviewAtAction, submitReviewAction } from "./actions";
+import {
+  buryCardAction,
+  nextReviewAtAction,
+  submitReviewAction,
+  suspendCardAction,
+  undoReviewAction,
+} from "./actions";
 
 export interface SessionCard {
   cardId: string;
+  noteId: string;
   noteType: "basic" | "cloze";
   clozeGroupKey: string | null;
   content: NoteContent;
   isNew: boolean;
+  /** ms até vencer para [Errei, Difícil, Bom, Fácil]. */
+  previewMs: [number, number, number, number];
+  lapses: number;
+  isLeech: boolean;
 }
 
 const RATINGS = [
-  { value: 1, label: "Errei", key: "1", sub: "de novo em breve" },
-  { value: 2, label: "Difícil", key: "2", sub: null },
-  { value: 3, label: "Bom", key: "3", sub: null },
-  { value: 4, label: "Fácil", key: "4", sub: null },
+  { value: 1, label: "Errei", key: "1" },
+  { value: 2, label: "Difícil", key: "2" },
+  { value: 3, label: "Bom", key: "3" },
+  { value: 4, label: "Fácil", key: "4" },
 ] as const;
 
 const KICKER = "text-[11px] font-semibold uppercase tracking-[0.08em]";
+// Learn-ahead (Anki): quando a fila principal esvazia, cards de learning que
+// vencem dentro desta janela são antecipados em vez de encerrar a sessão.
+const LEARN_AHEAD_MS = 20 * 60_000;
+
+interface LearnItem {
+  card: SessionCard;
+  readyAt: number;
+}
 
 function mediaUrl(assetId: string, thumb?: boolean): string {
   return `/api/media/${assetId}${thumb ? "?thumb=1" : ""}`;
@@ -31,6 +50,20 @@ function formatDuration(ms: number): string {
   const min = Math.round(ms / 60_000);
   if (min < 1) return "menos de 1 minuto";
   return `${min} ${min === 1 ? "minuto" : "minutos"}`;
+}
+
+/** Intervalo curto para os botões: <1min, 12min, 3h, 5d. */
+function formatInterval(ms: number): string {
+  if (ms < 60_000) return "<1min";
+  const min = ms / 60_000;
+  if (min < 60) return `${Math.round(min)}min`;
+  const h = min / 60;
+  if (h < 24) return `${Math.round(h)}h`;
+  const d = h / 24;
+  if (d < 30) return `${Math.round(d)}d`;
+  const mo = d / 30;
+  if (mo < 12) return `${Math.round(mo)}mês`;
+  return `${Math.round(d / 365)}a`;
 }
 
 function formatNextDue(iso: string): string {
@@ -75,35 +108,74 @@ export function ReviewSession({
   deckId,
   deckName,
   cards,
+  studySessionId,
 }: {
   deckId: string;
   deckName: string;
   cards: SessionCard[];
+  studySessionId?: string;
 }) {
-  const [idx, setIdx] = useState(0);
+  // Fila principal (não respondidos) + fila de learning (reentrada §7.2).
+  const [mainQueue, setMainQueue] = useState<SessionCard[]>(() => cards.slice(1));
+  const [learnQueue, setLearnQueue] = useState<LearnItem[]>([]);
+  const [current, setCurrent] = useState<SessionCard | null>(cards[0] ?? null);
+
   const [revealed, setRevealed] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tally, setTally] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
+  const [reviewedCount, setReviewedCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [nextDueAt, setNextDueAt] = useState<string | null>(null);
-  // Uma key por APRESENTAÇÃO do card: retry do mesmo card reusa a key
-  // (idempotência no servidor); avançar gera key nova.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Última ação (undo de 1 nível, como o Anki).
+  const lastActionRef = useRef<{ card: SessionCard; rating: number; durationMs: number } | null>(
+    null,
+  );
+  const [canUndo, setCanUndo] = useState(false);
+
+  const total = cards.length;
   const keyRef = useRef<string>("");
   const shownAtRef = useRef<number>(0);
+  const done = current === null;
 
-  const card = idx < cards.length ? cards[idx] : undefined;
-  const total = cards.length;
-  const reviewed = Object.values(tally).reduce((a, b) => a + b, 0);
-  const done = !card;
-
+  // Nova apresentação → key idempotente nova + cronômetro (só refs, sem render).
   useEffect(() => {
+    if (!current) return;
     keyRef.current = crypto.randomUUID();
     shownAtRef.current = Date.now();
-  }, [idx]);
+  }, [current]);
+
+  /** Puxa o próximo card: fila principal primeiro; senão learn-ahead. */
+  const advance = useCallback(() => {
+    setRevealed(false);
+    setMenuOpen(false);
+    setMainQueue((main) => {
+      if (main.length > 0) {
+        setCurrent(main[0]!);
+        return main.slice(1);
+      }
+      // Fila principal vazia: antecipa o learning mais próximo (learn-ahead).
+      setLearnQueue((learn) => {
+        if (learn.length === 0) {
+          setCurrent(null);
+          return learn;
+        }
+        let soonestIdx = 0;
+        for (let i = 1; i < learn.length; i++) {
+          if (learn[i]!.readyAt < learn[soonestIdx]!.readyAt) soonestIdx = i;
+        }
+        setCurrent(learn[soonestIdx]!.card);
+        return learn.filter((_, i) => i !== soonestIdx);
+      });
+      return main;
+    });
+  }, []);
 
   const rate = useCallback(
     async (rating: 1 | 2 | 3 | 4) => {
+      const card = current;
       if (!card || pending) return;
       setPending(true);
       setError(null);
@@ -114,6 +186,7 @@ export function ReviewSession({
         idempotencyKey: keyRef.current,
         durationMs,
         clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        ...(studySessionId ? { studySessionId } : {}),
       });
       if (!result.ok) {
         setError(result.error);
@@ -121,20 +194,92 @@ export function ReviewSession({
         return;
       }
       setTally((t) => ({ ...t, [rating]: (t[rating] ?? 0) + 1 }));
+      setReviewedCount((n) => n + 1);
       setElapsedMs((ms) => ms + durationMs);
-      setRevealed(false);
-      setIdx((i) => i + 1);
+      lastActionRef.current = { card, rating, durationMs };
+      setCanUndo(true);
+
+      // Reentrada intra-sessão: card ainda em learning e vencendo dentro da
+      // janela volta à fila; senão saiu da sessão (agendado p/ outro dia).
+      const dueInMs = new Date(result.dueAt).getTime() - Date.now();
+      if (
+        (result.state === "learning" || result.state === "relearning") &&
+        dueInMs <= LEARN_AHEAD_MS
+      ) {
+        setLearnQueue((learn) => [...learn, { card, readyAt: Date.now() + Math.max(0, dueInMs) }]);
+      }
       setPending(false);
+      advance();
     },
-    [card, pending],
+    [current, pending, advance, studySessionId],
   );
 
+  const undo = useCallback(async () => {
+    const last = lastActionRef.current;
+    if (!last || pending) return;
+    setPending(true);
+    setError(null);
+    const result = await undoReviewAction({ cardId: last.card.cardId });
+    if (!result.ok) {
+      setError(result.error);
+      setPending(false);
+      return;
+    }
+    // Reverte contadores e re-apresenta o card desfeito imediatamente.
+    setTally((t) => ({ ...t, [last.rating]: Math.max(0, (t[last.rating] ?? 0) - 1) }));
+    setReviewedCount((n) => Math.max(0, n - 1));
+    setElapsedMs((ms) => Math.max(0, ms - last.durationMs));
+    // Remove qualquer reentrada pendente do mesmo card (evita duplicar).
+    setLearnQueue((learn) => learn.filter((l) => l.card.cardId !== last.card.cardId));
+    if (current) setMainQueue((main) => [current, ...main]);
+    setRevealed(false);
+    setMenuOpen(false);
+    setCurrent(last.card);
+    lastActionRef.current = null;
+    setCanUndo(false);
+    setPending(false);
+  }, [pending, current]);
+
+  const manage = useCallback(
+    async (kind: "suspend" | "bury", includeSiblings?: boolean) => {
+      const card = current;
+      if (!card || pending) return;
+      setPending(true);
+      setError(null);
+      const result =
+        kind === "suspend"
+          ? await suspendCardAction({ cardId: card.cardId })
+          : await buryCardAction({ cardId: card.cardId, includeSiblings });
+      if (!result.ok) {
+        setError(result.error);
+        setPending(false);
+        return;
+      }
+      // Card sai da sessão; enterrar irmãos também os remove das filas.
+      lastActionRef.current = null;
+      setCanUndo(false);
+      if (includeSiblings) {
+        setMainQueue((main) => main.filter((c) => c.noteId !== card.noteId));
+        setLearnQueue((learn) => learn.filter((l) => l.card.noteId !== card.noteId));
+      }
+      setPending(false);
+      advance();
+    },
+    [current, pending, advance],
+  );
+
+  // Atalhos de teclado: espaço revela; 1-4 avalia; U desfaz.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!card) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if ((e.key === "u" || e.key === "U") && canUndo && !pending) {
+        e.preventDefault();
+        void undo();
+        return;
+      }
+      if (!current) return;
       if (!revealed && (e.key === " " || e.key === "Enter")) {
         e.preventDefault();
         setRevealed(true);
@@ -147,7 +292,7 @@ export function ReviewSession({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [card, revealed, rate]);
+  }, [current, revealed, rate, undo, canUndo, pending]);
 
   // Fim da sessão: busca a próxima revisão do deck (omitida se indisponível).
   useEffect(() => {
@@ -161,19 +306,20 @@ export function ReviewSession({
     };
   }, [done, deckId]);
 
-  if (!card) {
+  if (!current) {
     return (
       <div className="flex min-h-dvh flex-col">
         <SessionChrome deckName={deckName} counter={`${total} de ${total}`} progressPct={100} />
         <main className="flex flex-1 flex-col justify-center px-6 py-10">
           <p className={`text-muted-foreground ${KICKER}`}>Sessão concluída</p>
           <h2 className="mt-3 text-[32px] font-semibold leading-[1.15] text-pretty sm:text-[40px]">
-            {reviewed} {reviewed === 1 ? "card" : "cards"} em {formatDuration(elapsedMs)}
+            {reviewedCount} {reviewedCount === 1 ? "revisão" : "revisões"} em{" "}
+            {formatDuration(elapsedMs)}
           </h2>
           <dl className="mt-8 space-y-4 border-t-2 border-divider pt-6">
             {RATINGS.map((r) => {
               const count = tally[r.value] ?? 0;
-              const pct = reviewed > 0 ? (count / reviewed) * 100 : 0;
+              const pct = reviewedCount > 0 ? (count / reviewedCount) * 100 : 0;
               return (
                 <div key={r.value}>
                   <div className="flex items-baseline justify-between text-sm">
@@ -218,6 +364,8 @@ export function ReviewSession({
     );
   }
 
+  const card = current;
+  const remaining = mainQueue.length + learnQueue.length + 1; // +1 = card atual
   const renderOpts = {
     mediaUrl,
     cloze:
@@ -235,8 +383,8 @@ export function ReviewSession({
     <div className="flex min-h-dvh flex-col">
       <SessionChrome
         deckName={deckName}
-        counter={`${Math.min(idx + 1, total)} de ${total}`}
-        progressPct={total > 0 ? (reviewed / total) * 100 : 0}
+        counter={`${reviewedCount} feitos · ${remaining} na fila`}
+        progressPct={total > 0 ? (reviewedCount / (reviewedCount + remaining)) * 100 : 0}
       />
 
       <main className="flex flex-1 items-center px-6 py-8">
@@ -245,9 +393,17 @@ export function ReviewSession({
             revealed ? "text-[21px] sm:text-2xl" : "text-2xl sm:text-[29px]"
           }`}
         >
-          {card.isNew ? (
-            <p className={`mb-3 text-primary-text ${KICKER}`}>Novo</p>
-          ) : null}
+          <div className={`mb-3 flex items-center gap-2 ${KICKER}`}>
+            {card.isNew ? <span className="text-primary-text">Novo</span> : null}
+            {card.isLeech ? (
+              <span
+                className="border border-primary-text px-1.5 py-0.5 text-primary-text"
+                title={`Errado ${card.lapses}× — considere reformular ou suspender`}
+              >
+                Leech
+              </span>
+            ) : null}
+          </div>
           {card.noteType === "basic" ? (
             <>
               <div className="note-front">
@@ -284,7 +440,7 @@ export function ReviewSession({
             aria-label="Avaliar resposta"
             className="grid grid-cols-2 gap-[2px] border-2 border-divider bg-divider sm:grid-cols-4"
           >
-            {RATINGS.map((r) => (
+            {RATINGS.map((r, i) => (
               <button
                 key={r.value}
                 type="button"
@@ -299,19 +455,71 @@ export function ReviewSession({
                 >
                   {r.label}
                 </span>
-                {r.sub ? (
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{r.sub}</span>
-                ) : (
-                  <span className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
-                    {r.key}
-                  </span>
-                )}
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {formatInterval(card.previewMs[i]!)}
+                </span>
               </button>
             ))}
           </div>
         )}
 
-        <div className="mt-4 text-center">
+        <div className="mt-4 flex items-center justify-between gap-4 text-sm">
+          <button
+            type="button"
+            onClick={() => void undo()}
+            disabled={!canUndo || pending}
+            className="text-muted-foreground underline-offset-4 hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            ↶ Desfazer<span className="hidden sm:inline"> (U)</span>
+          </button>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              disabled={pending}
+              aria-expanded={menuOpen}
+              className="text-muted-foreground underline-offset-4 hover:underline disabled:opacity-40"
+            >
+              Opções
+            </button>
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute bottom-full right-0 mb-2 w-52 border-2 border-divider bg-background p-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void manage("bury")}
+                  className="block w-full px-3 py-2 text-left hover:bg-surface"
+                >
+                  Enterrar até amanhã
+                </button>
+                {card.noteType === "cloze" ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void manage("bury", true)}
+                    className="block w-full px-3 py-2 text-left hover:bg-surface"
+                  >
+                    Enterrar a nota inteira
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void manage("suspend")}
+                  className="block w-full px-3 py-2 text-left text-primary-text hover:bg-surface"
+                >
+                  Suspender card
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 text-center">
           <Link
             href={`/decks/${deckId}`}
             className="text-sm text-muted-foreground underline-offset-4 hover:underline"

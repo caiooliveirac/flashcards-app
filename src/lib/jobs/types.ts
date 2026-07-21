@@ -14,6 +14,8 @@ export const QUEUES = {
   mediaValidate: "media.validate",
   /** GC: staging órfã/não confirmada + assets ready sem media_references após carência. */
   mediaGc: "media.gc",
+  /** Agrega review_logs → daily_study_metrics por dia de estudo (job noturno, §7.4). */
+  metricsAggregate: "metrics.aggregate",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -25,9 +27,13 @@ export interface MediaValidatePayload {
 /** Payload vazio — job agendado (cron horário) e disparável manualmente. */
 export type MediaGcPayload = Record<string, never>;
 
+/** Payload vazio — job noturno agendado e disparável manualmente. */
+export type MetricsAggregatePayload = Record<string, never>;
+
 export interface JobPayloads {
   [QUEUES.mediaValidate]: MediaValidatePayload;
   [QUEUES.mediaGc]: MediaGcPayload;
+  [QUEUES.metricsAggregate]: MetricsAggregatePayload;
 }
 
 /** API de enfileiramento exposta às features (web). Nunca importar pg-boss fora de lib/jobs. */

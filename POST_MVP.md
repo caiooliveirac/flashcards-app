@@ -2,13 +2,13 @@
 
 Itens deixados de fora do MVP demonstrável (2026-07-21), em ordem de valor:
 
-1. **Fase 3 completa da revisão**: undo compensatório (`origin='undo'`), sibling
-   burial (revisar um cloze hoje revela os irmãos), reentrada intra-sessão de
-   learning steps + learn-ahead 20min (hoje a fila é snapshot: card "Errei" com
-   step de 1min só volta ao recarregar), limites diários por timezone com
-   `day_start_hour`, `study_sessions` persistidas + `daily_study_metrics`,
-   intervalos previstos nos 4 botões (`previewRatings`), detecção de leeches,
-   suspender/enterrar pela UI.
+1. ~~**Fase 3 completa da revisão**~~ **FEITO (2026-07-21, plano retomado por ordem
+   do dono):** undo compensatório (`origin='undo'`), sibling burial, reentrada
+   intra-sessão de learning + learn-ahead 20min, limites diários por timezone
+   (`day_start_hour`), `study_sessions` + `daily_study_metrics` (job noturno do
+   worker), intervalos previstos nos 4 botões, detecção de leeches, suspender/
+   enterrar pela UI. Aceites F3#1–#7 testados (152 unit + 104 integração).
+   Deferições conscientes registradas na seção Fase 3 de `debitos.md`.
 2. **Temperatura real**: a da home é regra fixa por contagem (0 = em dia,
    1–9 = atenção, ≥10 = quente). A materializada em `deck_stats` com
    retrievability (Fase 4) substitui.

@@ -10,3 +10,4 @@ src/lib/auth/require-admin.ts
 src/lib/jobs/boss.ts
 src/workers/handlers/media-gc.ts
 src/workers/handlers/media-validate.ts
+src/workers/handlers/metrics-aggregate.ts

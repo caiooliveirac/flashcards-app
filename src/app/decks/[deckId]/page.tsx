@@ -3,10 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { DeckStatusBadge } from "@/components/decks/deck-status-badge";
 import { SiteHeader } from "@/components/site-header";
 import { NotesList, type NoteRow } from "@/features/editor/notes-list";
-import { tagsForNotes } from "@/features/editor/queries";
 import { getDeckDetailStats } from "@/features/decks/detail-queries";
 import { getDeck, listDecks, type DeckWithSettings } from "@/features/decks/service";
-import { listNotes, searchNotes } from "@/features/notes/service";
+import { listNotes, searchNotes, tagsForNotes } from "@/features/notes/service";
 import { reviewCountsByDeck } from "@/features/review/service";
 import { auth, signOut } from "@/lib/auth";
 

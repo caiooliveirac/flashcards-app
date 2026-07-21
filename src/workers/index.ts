@@ -4,6 +4,7 @@ import { startWorkerBoss } from "@/lib/jobs/worker-boss";
 import { getStorage } from "@/lib/storage";
 import { handleMediaGc } from "./handlers/media-gc";
 import { handleMediaValidate, type MediaHandlerDeps } from "./handlers/media-validate";
+import { handleMetricsAggregate } from "./handlers/metrics-aggregate";
 
 /**
  * Entrypoint do worker (processo Node puro, PM2 fork — NADA de Next aqui).
@@ -39,6 +40,8 @@ async function main(): Promise<void> {
   await boss.createQueue(QUEUES.mediaValidate, { retryLimit: 3, retryBackoff: true });
   // GC é agendado de hora em hora: sem retry (a próxima varredura cobre).
   await boss.createQueue(QUEUES.mediaGc, { retryLimit: 0 });
+  // Métricas: job noturno idempotente (upsert); a próxima noite recomputa.
+  await boss.createQueue(QUEUES.metricsAggregate, { retryLimit: 0 });
 
   // v12: o handler de work() recebe ARRAY de jobs.
   await boss.work<MediaValidatePayload>(
@@ -53,9 +56,16 @@ async function main(): Promise<void> {
   await boss.work(QUEUES.mediaGc, { batchSize: 1 }, async () => {
     await handleMediaGc(deps);
   });
+  await boss.work(QUEUES.metricsAggregate, { batchSize: 1 }, async () => {
+    const result = await handleMetricsAggregate(clients);
+    log("metrics_aggregated", result);
+  });
 
   // Minuto :17 fixo — fora dos picos de hora cheia do cluster compartilhado.
   await boss.schedule(QUEUES.mediaGc, "17 * * * *", {}, { tz: "UTC" });
+  // 06:23 UTC (após o corte das 4h em America/Sao_Paulo = 07:00Z do dia
+  // anterior); recomputa os últimos dias por usuário, tz-safe pelo upsert.
+  await boss.schedule(QUEUES.metricsAggregate, "23 6 * * *", {}, { tz: "UTC" });
 
   log("started", { queues: Object.values(QUEUES), storage: deps.storage.kind });
 

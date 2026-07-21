@@ -1,18 +1,23 @@
 # Current Status
 
-## MVP demonstrável (2026-07-21) — modo override, plano de 7 fases SUSPENSO
+## Fase 3 (Revisão) COMPLETA (2026-07-21) — plano de fases retomado
 
-Fluxo ponta a ponta em produção: login → baralhos com contagens (total,
-a revisar, novos) e temperatura simples → criar/abrir baralho → adicionar
-cards (básico/cloze/imagem, editor da Fase 2) → **sessão de revisão**
-(`/decks/[id]/review`: vencidos→novos, frente→revelar (espaço)→avaliar
-Errei/Difícil/Bom/Fácil (1–4), FSRS-6 real via ts-fsrs + perfil do usuário,
-idempotente, progresso "N de M") → resumo da sessão → home atualizada.
-Fila = snapshot da sessão; sem undo/burial/limites diários — ver `POST_MVP.md`.
-Retomar as fases originais só com nova ordem do dono.
+Ordem do dono: retomar as próximas etapas a partir da **Fase 3 completa**
+(o modo MVP foi encerrado). Escopo/aceite F3#1–#7 do plano cobertos e testados
+(NÃO em produção ainda — falta deploy). Próxima etapa natural: Fase 4
+(dashboard, temperatura real, backlog, notificações).
+
+Fluxo de revisão agora (`/decks/[id]/review`): fila prioriza vencidos→novos
+respeitando **limites diários por dia de estudo** (§7.4, corte `day_start_hour`),
+frente→revelar→avaliar 1–4 com **intervalos previstos em cada botão**, submit
+FSRS-6 idempotente; **undo compensatório** (botão/tecla U, restaura learning
+step/reps/lapses); **sibling burial** (responder um cloze enterra os irmãos até
+amanhã); **suspender/enterrar** manual pelo menu Opções; **reentrada
+intra-sessão** de learning + learn-ahead 20min; **leech** sinalizado (lapses≥8);
+`study_sessions` persistida + `daily_study_metrics` por job noturno do worker.
 
 - **Fase 2 (Criação) concluída** (2026-07-21): decks, editor (básico/cloze/imagem), derivação de cards com fingerprint e matching §5, mídia com validação real no worker, busca FTS. Em produção em `https://flashcards.mnrs.com.br`.
-- **Fase 3 (Revisão)**: MVP mínimo entregue (fila, submit FSRS idempotente, resumo); escopo completo suspenso.
+- **Fase 3 (Revisão) concluída** (2026-07-21): undo, sibling burial, limites diários por timezone, sessões + métricas, preview de intervalos, learn-ahead, leech. Migration 0007 (`study_sessions` + `daily_study_metrics` + FK) testada em banco limpo. Deploy pendente.
 - **Credencial provisória de produção:** `caio`/`1234` (admin) — trocar pelo `/admin` (débito #8 F1).
 - **Ações externas do dono (não bloqueiam):** Google OAuth (F1); API key Magalu Object Storage → chavear `STORAGE_DRIVER=s3` (débito #1 F2); executar o checklist mobile real (`docs/operations/mobile-checklist.md`).
 
@@ -32,6 +37,7 @@ Retomar as fases originais só com nova ordem do dono.
 - **Testes:** ~135 unit (property-based em derivação/matching/parser) + ~90 integração (RLS/vazamento, preservação de progresso, worker real, GC, EXPLAIN do GIN) + **E2E Playwright 8 specs verdes** (F2#1: 5 cards só teclado em 486ms; cloze 2 grupos; paste real de imagem; mobile file input; axe sem violações críticas — contraste AA corrigido no token `--primary`; isolamento entre contas).
 - **Revisão adversarial multi-agente:** 4 lentes → 16 achados → 14 confirmados por verificação independente (2 provados com psql concorrente) → todos corrigidos com testes de regressão (GC race, TOCTOU local, reativação por key reciclada, retry destrutivo do validate, thumbnail fora do try/catch, nginx `client_max_body_size`, orçamento de conexões do worker).
 - Aceites F2#1–#7 cobertos (F2#4 parcial: caminho mobile E2E verde; checklist em devices reais pendente do dono).
+- **Fase 3:** aceites F3#1–#7 cobertos por testes. Total do repo após F3: **152 unit + 104 integração verdes** + build de produção verde. Novos testes: `study-day` (11 unit, DST/corte), `undo`, `sibling-burial`, `daily-limits`, `metrics` (sessão+job), `review-fase3` (concorrência paralela F3#1 + round-trip float8 do FSRS F3#4). E2E de revisão ainda não entrou na suíte local automatizada (débito F3) — `prod-smoke` atualizado para a nova cópia/comportamento, mas exige rodada real pós-deploy.
 
 ## Produção
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getReviewQueue } from "@/features/review/service";
+import { getReviewQueue, startStudySession } from "@/features/review/service";
 import { ReviewSession, type SessionCard } from "@/features/review/review-session";
 import { auth } from "@/lib/auth";
 
@@ -21,6 +21,12 @@ export default async function ReviewPage({
   } catch {
     notFound();
   }
+
+  // Abre a sessão só quando há o que revisar (evita sessão vazia no banco).
+  const studySessionId =
+    queue.cards.length > 0
+      ? await startStudySession(session.user.id, { deckId })
+      : undefined;
 
   // Chrome mínimo: sem SiteHeader/nav global — a sessão ocupa a tela toda.
   return (
@@ -62,6 +68,7 @@ export default async function ReviewPage({
           deckId={queue.deckId}
           deckName={queue.deckName}
           cards={queue.cards as SessionCard[]}
+          studySessionId={studySessionId}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   doublePrecision,
   index,
   integer,
@@ -21,6 +22,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { cards } from "./content";
+import { decks } from "./decks";
 import { createdAt, ownerPolicy, updatedAt } from "./helpers";
 
 export const progressState = pgEnum("progress_state", [
@@ -83,8 +85,12 @@ export const reviewLogs = pgTable(
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
-    // FK real para study_sessions entra na Fase 3.
-    studySessionId: uuid("study_session_id"),
+    // FK para a sessão de estudo (Fase 3); set null se a sessão for removida —
+    // o log é append-only e nunca some junto.
+    studySessionId: uuid("study_session_id").references(
+      (): AnyPgColumn => studySessions.id,
+      { onDelete: "set null" },
+    ),
     reviewedAt: timestamp("reviewed_at", { mode: "date", withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -150,5 +156,68 @@ export const fsrsProfiles = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.version] }),
     ownerPolicy("fsrs_profiles_owner", t.userId),
+  ],
+);
+
+/**
+ * Sessão de estudo (Fase 3, §7.2). Criada quando o usuário abre a fila de um
+ * deck; os `review_logs` da sessão apontam para ela. `study_day` é a convenção
+ * única (§7.4) — a sessão NÃO reseta ao cruzar meia-noite, só ao cruzar o corte.
+ * Contadores são desnormalização barata p/ o resumo; a verdade é `review_logs`.
+ */
+export const studySessions = pgTable(
+  "study_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    deckId: uuid("deck_id").references(() => decks.id, { onDelete: "set null" }),
+    kind: sessionKind("kind").notNull().default("review"),
+    studyDay: date("study_day").notNull(),
+    startedAt: timestamp("started_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp("ended_at", { mode: "date", withTimezone: true }),
+    newCount: integer("new_count").notNull().default(0),
+    reviewCount: integer("review_count").notNull().default(0),
+    againCount: integer("again_count").notNull().default(0),
+    timeMs: integer("time_ms").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("study_sessions_user_day_idx").on(t.userId, t.studyDay),
+    ownerPolicy("study_sessions_owner", t.userId),
+  ],
+);
+
+/**
+ * Métricas diárias agregadas (Fase 3 → dashboard da Fase 4). Uma linha por
+ * (usuário, dia de estudo). Preenchida pelo job noturno do worker a partir de
+ * `review_logs` — role de serviço (BYPASSRLS) escreve; app só lê.
+ * `retention_num/den` = acertos (rating≥3) / total na PRIMEIRA revisão do card
+ * no dia (retenção real, §7.4).
+ */
+export const dailyStudyMetrics = pgTable(
+  "daily_study_metrics",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    studyDay: date("study_day").notNull(),
+    reviewsCount: integer("reviews_count").notNull().default(0),
+    newCount: integer("new_count").notNull().default(0),
+    againCount: integer("again_count").notNull().default(0),
+    timeMs: integer("time_ms").notNull().default(0),
+    retentionNum: integer("retention_num").notNull().default(0),
+    retentionDen: integer("retention_den").notNull().default(0),
+    computedAt: timestamp("computed_at", { mode: "date", withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.studyDay] }),
+    ownerPolicy("daily_study_metrics_owner", t.userId),
   ],
 );

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { NoteEditorScreen } from "@/features/editor/note-editor-screen";
-import { getNoteForEdit, type NoteForEdit } from "@/features/editor/queries";
+import { getNoteForEdit, type NoteForEdit } from "@/features/notes/service";
 import { getDeck, type DeckWithSettings } from "@/features/decks/service";
 import { listTags } from "@/features/tags/service";
 import { auth } from "@/lib/auth";

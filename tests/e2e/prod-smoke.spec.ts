@@ -65,20 +65,24 @@ test("fluxo MVP ponta a ponta em produção", async ({ page }) => {
   await expect(deckAfter.getByText(/2 novos/).first()).toBeVisible();
   await expect(deckAfter.getByText("a revisar")).toBeVisible();
 
-  // 6–10. Sessão de revisão via deck detail ("Estudar novos — 2"): revelar e avaliar
+  // 6–10. Sessão de revisão via deck detail ("Estudar novos — 2"): revelar e avaliar.
+  // Fase 3: sibling burial (enterra o irmão da nota cloze) + reentrada de learning
+  // (learn-ahead) tornam a contagem de cards dinâmica — revela+avalia "Bom" em laço
+  // até a sessão concluir, em vez de assumir exatamente 2 apresentações.
   await deckAfter.getByRole("link", { name: DECK_NAME, exact: true }).click();
   await page.getByRole("link", { name: /Estudar novos — 2/ }).click();
-  await expect(page.getByText("1 de 2", { exact: true })).toBeVisible();
-  await page.keyboard.press("Space");
-  await expect(page.getByRole("group", { name: /avaliar resposta/i })).toBeVisible();
-  await page.getByRole("button", { name: /^Bom/ }).click();
-  await expect(page.getByText("2 de 2", { exact: true })).toBeVisible();
-  await page.keyboard.press("Space");
-  await page.keyboard.press("Digit3");
+  await expect(page.getByText(/na fila$/)).toBeVisible();
 
-  // 11. Resumo da sessão ("Sessão concluída" + "2 cards em ~X minutos")
-  await expect(page.getByText("Sessão concluída")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /2 cards em/ })).toBeVisible();
+  const done = page.getByText("Sessão concluída");
+  for (let i = 0; i < 12 && !(await done.isVisible()); i++) {
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("group", { name: /avaliar resposta/i })).toBeVisible();
+    await page.getByRole("button", { name: /^Bom/ }).click();
+  }
+
+  // 11. Resumo da sessão ("Sessão concluída" + "N revisões em ~X minutos")
+  await expect(done).toBeVisible();
+  await expect(page.getByRole("heading", { name: /revisõe?s? em/ })).toBeVisible();
 
   // 12. Home atualizada: nada novo pendente (cards em learning, due ~minutos)
   await page.getByRole("link", { name: "Voltar aos baralhos" }).click();

@@ -1,16 +1,148 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import {
-  createEmptyCard,
-  fsrs,
-  generatorParameters,
-  State,
-  type Card as FsrsCard,
-  type Grade,
-} from "ts-fsrs";
+import { and, asc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import type { Grade } from "ts-fsrs";
 import type { Tx } from "@/db/client";
 import { withUserTransaction } from "@/db/runtime";
-import { auditLogs, cardProgress, cards, decks, fsrsProfiles, notes, reviewLogs } from "@/db/schema";
+import {
+  auditLogs,
+  cardProgress,
+  cards,
+  deckSettings,
+  decks,
+  fsrsProfiles,
+  notes,
+  reviewLogs,
+  studySessions,
+  userPreferences,
+} from "@/db/schema";
 import type { NoteContent } from "@/lib/content";
+import {
+  nextStudyDayStart,
+  studyDayKey,
+  studyDayStart,
+  type StudyDayConfig,
+} from "@/lib/study-day";
+import {
+  buildScheduler,
+  FSRS_VERSION,
+  previewMs,
+  stateToDb,
+  toFsrsCard,
+  type PreviewMs,
+} from "./fsrs";
+import { loadStudyDayConfig } from "./study-day-config";
+
+export interface DailyRemaining {
+  newRemaining: number;
+  reviewRemaining: number;
+}
+
+/**
+ * Orçamento restante do DIA DE ESTUDO (§7.4) para o deck: limite (override do
+ * deck ▸ preferência do usuário) menos o que já foi feito desde o corte do dia.
+ * Contar desde `studyDayStart` faz o limite NÃO resetar ao cruzar a meia-noite
+ * (só reseta no corte das 4h) — aceite F3#7. Descontos de undo mantêm a conta
+ * honesta (introdução/revisão desfeita libera orçamento).
+ */
+async function dailyRemaining(
+  tx: Tx,
+  userId: string,
+  deckId: string,
+  config: StudyDayConfig,
+): Promise<DailyRemaining> {
+  const dayStart = studyDayStart(new Date(), config);
+  const [prefs] = await tx
+    .select({
+      newPerDay: userPreferences.newCardsPerDay,
+      maxReviews: userPreferences.maxReviewsPerDay,
+    })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  const [settings] = await tx
+    .select({
+      newOverride: deckSettings.newPerDayOverride,
+      reviewOverride: deckSettings.maxReviewsPerDayOverride,
+    })
+    .from(deckSettings)
+    .where(eq(deckSettings.deckId, deckId))
+    .limit(1);
+
+  const newLimit = settings?.newOverride ?? prefs?.newPerDay ?? NEW_CARDS_PER_SESSION;
+  const reviewLimit = settings?.reviewOverride ?? prefs?.maxReviews ?? MAX_DUE_PER_SESSION;
+
+  // Contadores do dia para ESTE deck: introduções (state_before='new') e
+  // revisões (state_before<>'new'), líquidos dos undos correspondentes.
+  const [counts] = await tx
+    .select({
+      newDone: sql<number>`
+        count(*) filter (where ${reviewLogs.origin} = 'web' and ${reviewLogs.stateBefore} = 'new')
+        - count(*) filter (where ${reviewLogs.origin} = 'undo' and ${reviewLogs.stateAfter} = 'new')`.mapWith(
+        Number,
+      ),
+      reviewsDone: sql<number>`
+        count(*) filter (where ${reviewLogs.origin} = 'web' and ${reviewLogs.stateBefore} <> 'new')
+        - count(*) filter (where ${reviewLogs.origin} = 'undo' and ${reviewLogs.stateAfter} <> 'new')`.mapWith(
+        Number,
+      ),
+    })
+    .from(reviewLogs)
+    .innerJoin(cards, eq(cards.id, reviewLogs.cardId))
+    .innerJoin(notes, eq(notes.id, cards.noteId))
+    .where(
+      and(
+        eq(reviewLogs.userId, userId),
+        eq(notes.deckId, deckId),
+        gte(reviewLogs.reviewedAt, dayStart),
+      ),
+    );
+
+  return {
+    newRemaining: Math.max(0, newLimit - (counts?.newDone ?? 0)),
+    reviewRemaining: Math.max(0, reviewLimit - (counts?.reviewsDone ?? 0)),
+  };
+}
+
+/**
+ * Sibling burial (§7.2): ao revisar um card, os IRMÃOS (mesma nota, ainda
+ * ativos e não suspensos) recebem `buried_until` = início do próximo dia de
+ * estudo — responder um cloze não pode revelar/inflar os outros grupos da nota.
+ * Cria linha de progresso p/ irmãos novos (state 'new' + buried_until). Nunca
+ * ENCURTA um enterro já mais distante (greatest).
+ */
+async function burySiblings(
+  tx: Tx,
+  userId: string,
+  noteId: string,
+  exceptCardId: string,
+  until: Date,
+): Promise<void> {
+  const siblings = await tx
+    .select({ id: cards.id })
+    .from(cards)
+    .where(
+      and(
+        eq(cards.noteId, noteId),
+        eq(cards.ownerUserId, userId),
+        eq(cards.status, "active"),
+        ne(cards.id, exceptCardId),
+      ),
+    );
+  if (siblings.length === 0) return;
+  await tx
+    .insert(cardProgress)
+    .values(
+      siblings.map((s) => ({ userId, cardId: s.id, state: "new" as const, buriedUntil: until })),
+    )
+    .onConflictDoUpdate({
+      target: [cardProgress.userId, cardProgress.cardId],
+      // Só enterra quem não está suspenso; mantém o enterro mais distante.
+      set: {
+        buriedUntil: sql`greatest(coalesce(${cardProgress.buriedUntil}, ${until}), ${until})`,
+        updatedAt: sql`now()`,
+      },
+      setWhere: sql`${cardProgress.suspendedAt} is null`,
+    });
+}
 
 /**
  * MVP de revisão (Fase 3 mínima): fila vencidos→novos, submit idempotente com
@@ -23,6 +155,8 @@ type UserRunner = <T>(userId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>;
 
 export const NEW_CARDS_PER_SESSION = 20;
 export const MAX_DUE_PER_SESSION = 100;
+/** Lapses acumulados a partir dos quais o card é sinalizado como leech (Anki=8). */
+export const LEECH_THRESHOLD = 8;
 
 export interface ReviewQueueCard {
   cardId: string;
@@ -31,6 +165,11 @@ export interface ReviewQueueCard {
   clozeGroupKey: string | null;
   content: NoteContent;
   isNew: boolean;
+  /** ms até o próximo vencimento para [Errei, Difícil, Bom, Fácil] (aceite F3). */
+  previewMs: PreviewMs;
+  /** lapses acumulados — leech quando ≥ limiar (aceite F3, ver LEECH_THRESHOLD). */
+  lapses: number;
+  isLeech: boolean;
 }
 
 export interface ReviewQueue {
@@ -40,8 +179,6 @@ export interface ReviewQueue {
   newCount: number;
   cards: ReviewQueueCard[];
 }
-
-const FSRS_VERSION = "ts-fsrs-5/FSRS-6";
 
 /**
  * Distribui os cards de forma que nenhum par consecutivo compartilhe o mesmo
@@ -98,6 +235,14 @@ function liveCardJoin(tx: Tx, userId: string, deckId?: string) {
       dueAt: cardProgress.dueAt,
       suspendedAt: cardProgress.suspendedAt,
       buriedUntil: cardProgress.buriedUntil,
+      stability: cardProgress.stability,
+      difficulty: cardProgress.difficulty,
+      elapsedDays: cardProgress.elapsedDays,
+      scheduledDays: cardProgress.scheduledDays,
+      reps: cardProgress.reps,
+      lapses: cardProgress.lapses,
+      learningStep: cardProgress.learningStep,
+      lastReviewedAt: cardProgress.lastReviewedAt,
     })
     .from(cards)
     .innerJoin(notes, eq(notes.id, cards.noteId))
@@ -133,6 +278,18 @@ export async function getReviewQueue(
     }
 
     const now = new Date();
+    const config = await loadStudyDayConfig(tx, userId);
+    const { newRemaining, reviewRemaining } = await dailyRemaining(tx, userId, input.deckId, config);
+
+    // Perfil FSRS ativo → scheduler compartilhado p/ os intervalos previstos.
+    const [profile] = await tx
+      .select({ parameters: fsrsProfiles.parameters, desiredRetention: fsrsProfiles.desiredRetention })
+      .from(fsrsProfiles)
+      .where(and(eq(fsrsProfiles.userId, userId), eq(fsrsProfiles.active, true)))
+      .orderBy(sql`${fsrsProfiles.version} desc`)
+      .limit(1);
+    const scheduler = buildScheduler(profile);
+
     const rows = await liveCardJoin(tx, userId, input.deckId).orderBy(
       asc(cards.createdAt),
       asc(cards.variant),
@@ -142,22 +299,45 @@ export async function getReviewQueue(
       (r) =>
         !r.suspendedAt && (!r.buriedUntil || r.buriedUntil <= now),
     );
+    // Limite diário (§7.4) manda; o cap de sessão é um teto secundário.
     const due = usable
       .filter((r) => r.state && r.state !== "new" && r.dueAt && r.dueAt <= now)
       .sort((a, b) => (a.dueAt as Date).getTime() - (b.dueAt as Date).getTime())
-      .slice(0, MAX_DUE_PER_SESSION);
+      .slice(0, Math.min(MAX_DUE_PER_SESSION, reviewRemaining));
     const fresh = usable
       .filter((r) => !r.state || r.state === "new")
-      .slice(0, NEW_CARDS_PER_SESSION);
+      .slice(0, Math.min(NEW_CARDS_PER_SESSION, newRemaining));
 
-    const toCard = (r: (typeof rows)[number], isNew: boolean): ReviewQueueCard => ({
-      cardId: r.cardId,
-      noteId: r.noteId,
-      noteType: r.noteType,
-      clozeGroupKey: r.clozeGroupKey,
-      content: r.contentJson as NoteContent,
-      isNew,
-    });
+    const toCard = (r: (typeof rows)[number], isNew: boolean): ReviewQueueCard => {
+      const before = toFsrsCard(
+        r.state
+          ? {
+              dueAt: r.dueAt,
+              stability: r.stability ?? 0,
+              difficulty: r.difficulty ?? 0,
+              elapsedDays: r.elapsedDays ?? 0,
+              scheduledDays: r.scheduledDays ?? 0,
+              reps: r.reps ?? 0,
+              lapses: r.lapses ?? 0,
+              learningStep: r.learningStep ?? 0,
+              state: r.state,
+              lastReviewedAt: r.lastReviewedAt,
+            }
+          : null,
+        now,
+      );
+      return {
+        cardId: r.cardId,
+        noteId: r.noteId,
+        noteType: r.noteType,
+        clozeGroupKey: r.clozeGroupKey,
+        content: r.contentJson as NoteContent,
+        isNew,
+        previewMs: previewMs(scheduler, before, now),
+        lapses: r.lapses ?? 0,
+        isLeech: (r.lapses ?? 0) >= LEECH_THRESHOLD,
+      };
+    };
 
     const dueCards = due.map((r) => toCard(r, false));
     const freshCards = fresh.map((r) => toCard(r, true));
@@ -169,6 +349,42 @@ export async function getReviewQueue(
       newCount: fresh.length,
       cards: [...spreadSameNote(dueCards), ...spreadSameNote(freshCards)],
     };
+  });
+}
+
+/**
+ * Abre (ou reaproveita) a sessão de estudo do dia para o deck. Reusa a sessão
+ * ABERTA (ended_at null) do MESMO dia de estudo (§7.4) — cruzar a meia-noite
+ * mantém a sessão; cruzar o corte das 4h abre uma nova. Os review_logs apontam
+ * para ela; o job noturno agrega em daily_study_metrics.
+ */
+export async function startStudySession(
+  userId: string,
+  input: { deckId: string },
+  runUser: UserRunner = withUserTransaction,
+): Promise<string> {
+  return runUser(userId, async (tx) => {
+    const config = await loadStudyDayConfig(tx, userId);
+    const today = studyDayKey(new Date(), config);
+    const [open] = await tx
+      .select({ id: studySessions.id })
+      .from(studySessions)
+      .where(
+        and(
+          eq(studySessions.userId, userId),
+          eq(studySessions.deckId, input.deckId),
+          eq(studySessions.studyDay, today),
+          isNull(studySessions.endedAt),
+        ),
+      )
+      .orderBy(sql`${studySessions.startedAt} desc`)
+      .limit(1);
+    if (open) return open.id;
+    const [created] = await tx
+      .insert(studySessions)
+      .values({ userId, deckId: input.deckId, kind: "review", studyDay: today })
+      .returning({ id: studySessions.id });
+    return created!.id;
   });
 }
 
@@ -209,25 +425,13 @@ export async function reviewCountsByDeck(
   });
 }
 
-const stateToDb: Record<State, "new" | "learning" | "review" | "relearning"> = {
-  [State.New]: "new",
-  [State.Learning]: "learning",
-  [State.Review]: "review",
-  [State.Relearning]: "relearning",
-};
-const stateFromDb: Record<"new" | "learning" | "review" | "relearning", State> = {
-  new: State.New,
-  learning: State.Learning,
-  review: State.Review,
-  relearning: State.Relearning,
-};
-
 export interface SubmitReviewInput {
   cardId: string;
   rating: 1 | 2 | 3 | 4;
   idempotencyKey: string;
   durationMs?: number;
   clientTimezone?: string;
+  studySessionId?: string;
 }
 
 export interface SubmitReviewResult {
@@ -247,7 +451,7 @@ export async function submitReview(
   return runUser(userId, async (tx) => {
     // Card ativo do usuário (nota e deck vivos) — ownership explícito + RLS.
     const [card] = await tx
-      .select({ cardId: cards.id })
+      .select({ cardId: cards.id, noteId: notes.id })
       .from(cards)
       .innerJoin(notes, eq(notes.id, cards.noteId))
       .innerJoin(decks, eq(decks.id, notes.deckId))
@@ -283,33 +487,12 @@ export async function submitReview(
       .where(and(eq(fsrsProfiles.userId, userId), eq(fsrsProfiles.active, true)))
       .orderBy(sql`${fsrsProfiles.version} desc`)
       .limit(1);
-    const w = (profile?.parameters as number[] | undefined) ?? undefined;
-    const desiredRetention = profile?.desiredRetention ?? 0.9;
+    const scheduler = buildScheduler(profile);
+    const desiredRetention = scheduler.desiredRetention;
 
     const now = new Date();
-    const before: FsrsCard = progress
-      ? {
-          due: progress.dueAt ?? now,
-          stability: progress.stability,
-          difficulty: progress.difficulty,
-          elapsed_days: progress.elapsedDays,
-          scheduled_days: progress.scheduledDays,
-          reps: progress.reps,
-          lapses: progress.lapses,
-          learning_steps: progress.learningStep,
-          state: stateFromDb[progress.state],
-          last_review: progress.lastReviewedAt ?? undefined,
-        }
-      : createEmptyCard(now);
-
-    const scheduler = fsrs(
-      generatorParameters({
-        ...(w && w.length >= 17 ? { w } : {}),
-        request_retention: desiredRetention,
-        enable_fuzz: false,
-      }),
-    );
-    const { card: after } = scheduler.next(before, now, input.rating as Grade);
+    const before = toFsrsCard(progress ?? null, now);
+    const { card: after } = scheduler.fsrs.next(before, now, input.rating as Grade);
 
     // Idempotência: o log é a fonte da verdade do double-submit (unique
     // (user_id, idempotency_key)); conflito => já processado, devolve o estado atual.
@@ -318,6 +501,7 @@ export async function submitReview(
       .values({
         userId,
         cardId: input.cardId,
+        studySessionId: input.studySessionId ?? null,
         rating: input.rating,
         stateBefore: stateToDb[before.state],
         stateAfter: stateToDb[after.state],
@@ -393,6 +577,26 @@ export async function submitReview(
           updatedAt: now,
         },
       });
+
+    // Sibling burial: enterra os irmãos da nota até o próximo dia de estudo.
+    const config = await loadStudyDayConfig(tx, userId);
+    await burySiblings(tx, userId, card.noteId, input.cardId, nextStudyDayStart(now, config));
+
+    // Contadores da sessão (desnormalização barata; verdade = review_logs).
+    if (input.studySessionId) {
+      const wasNew = !progress || progress.state === "new";
+      await tx
+        .update(studySessions)
+        .set({
+          reviewCount: wasNew ? sql`${studySessions.reviewCount}` : sql`${studySessions.reviewCount} + 1`,
+          newCount: wasNew ? sql`${studySessions.newCount} + 1` : sql`${studySessions.newCount}`,
+          againCount:
+            input.rating === 1 ? sql`${studySessions.againCount} + 1` : sql`${studySessions.againCount}`,
+          timeMs: sql`${studySessions.timeMs} + ${input.durationMs ?? 0}`,
+          updatedAt: sql`now()`,
+        })
+        .where(and(eq(studySessions.id, input.studySessionId), eq(studySessions.userId, userId)));
+    }
 
     await tx.insert(auditLogs).values({
       actorUserId: userId,
