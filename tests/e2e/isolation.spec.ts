@@ -23,8 +23,10 @@ test("e2e-b não vê nem acessa o deck do e2e", async ({ page, browser }) => {
   try {
     await loginViaForm(pageB, "e2e-b", "1234");
 
-    // Home do e2e-b: vazia (estado "nenhum baralho"), sem o deck do e2e.
-    await expect(pageB.getByRole("heading", { name: "Nenhum baralho ainda" })).toBeVisible();
+    // Home do e2e-b: vazia (onboarding editorial), sem o deck do e2e.
+    await expect(
+      pageB.getByRole("heading", { name: "A sua primeira edição começa com um baralho." }),
+    ).toBeVisible();
     await expect(pageB.getByText(deckName)).toHaveCount(0);
 
     // Acesso direto ao deck do outro: 404 uniforme (não vaza existência).

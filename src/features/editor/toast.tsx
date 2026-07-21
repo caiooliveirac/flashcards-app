@@ -6,6 +6,11 @@ import { useCallback, useRef, useState } from "react";
  * Toasts mínimos do fluxo contínuo (criado/desfazer/erro). Sem dependência:
  * host fixo acima da toolbar sticky, sucesso/info em role=status, erro em
  * role=alert; ação opcional ("Desfazer") focável por teclado.
+ *
+ * Redesign: tinta sólida invertida (bg-foreground/text-background), raio zero.
+ * A ação usa o mesmo texto invertido + sublinhado/peso — o accent não tem
+ * contraste garantido sobre a tinta nos dois temas (decisão de acessibilidade);
+ * erro é marcado por filete accent à esquerda.
  */
 
 export interface ToastItem {
@@ -48,16 +53,17 @@ export function useToasts(): ToastApi {
 
 export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (id: number) => void }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4">
       {toasts.map((toast) => (
         <div
           key={toast.id}
           role={toast.kind === "error" ? "alert" : "status"}
-          className={`pointer-events-auto flex max-w-md items-center gap-3 rounded-lg border px-4 py-2.5 text-sm shadow-lg ${
+          className="pointer-events-auto flex max-w-md items-center gap-3 bg-foreground px-4 py-3 text-sm text-background shadow-lg"
+          style={
             toast.kind === "error"
-              ? "border-destructive bg-card text-destructive"
-              : "border-border bg-card text-card-foreground"
-          }`}
+              ? { borderLeft: "4px solid var(--primary)" }
+              : undefined
+          }
         >
           <span>{toast.message}</span>
           {toast.action ? (
@@ -67,7 +73,7 @@ export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (
                 toast.action?.onClick();
                 dismiss(toast.id);
               }}
-              className="shrink-0 font-medium text-primary underline-offset-4 outline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              className="shrink-0 font-semibold text-background underline underline-offset-4 transition-opacity duration-150 ease-out hover:opacity-80"
             >
               {toast.action.label}
             </button>
@@ -76,7 +82,7 @@ export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (
             type="button"
             aria-label="Fechar aviso"
             onClick={() => dismiss(toast.id)}
-            className="shrink-0 text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="shrink-0 text-background/70 transition-colors duration-150 ease-out hover:text-background"
           >
             ×
           </button>

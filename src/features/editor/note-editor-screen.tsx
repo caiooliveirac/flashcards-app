@@ -3,8 +3,9 @@
 import type { Editor, JSONContent } from "@tiptap/core";
 import FileHandler from "@tiptap/extension-file-handler";
 import { EditorContent, useEditor } from "@tiptap/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { docHasVisibleContent } from "@/features/editor/doc-utils";
 import { EditorToolbar } from "@/features/editor/editor-toolbar";
 import { nextGroupKeyWithHistory } from "@/features/editor/group-keys";
@@ -27,16 +28,22 @@ import {
   updateNoteAction,
 } from "@/features/notes/actions";
 import { clozePreviewCards } from "@/lib/content/derive";
+import type { BasicNoteContent } from "@/lib/content/schema";
 import { collectGroupKeysFromDoc } from "@/lib/editor/cloze-node";
 import { editorExtensions } from "@/lib/editor/extensions";
 import type { NotePmDocs } from "@/lib/editor/parse";
 import { pmDocsToNoteContent } from "@/lib/editor/serialize";
+import { renderNoteContent } from "@/lib/render";
 
 /**
  * Editor de criação/edição de notas (fluxos §13.1-2, aceites F2#1-F2#4).
  * 'use client' + immediatelyRender:false (App Router). Toolbar sticky bottom
  * com safe-area (mobile, pesquisa R10). Fluxo contínuo: Cmd/Ctrl+Enter salva
  * de qualquer campo → toast com Desfazer → limpa → foco de volta.
+ *
+ * Redesign "Editorial Cognition": layout editor 1fr + aside 340px (prévia +
+ * tags), superfícies de escrita sem caixa (régua 2px no topo + kicker),
+ * tabs como faixa segmentada com ativo em tinta invertida.
  */
 
 type TabId = "basic" | "cloze" | "image";
@@ -60,6 +67,8 @@ export interface NoteEditorScreenProps {
   deckName: string;
   maxBytes: number;
   tagSuggestions: string[];
+  /** Presente = a tela renderiza a barra superior "← deck" + contador. */
+  backHref?: string;
   /** Presente = modo edição (tabs escondidas, tipo imutável). */
   editNote?: EditNoteProps;
 }
@@ -72,11 +81,13 @@ interface SelectedCloze {
 
 type PreviewCard = ReturnType<typeof clozePreviewCards>[number];
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "basic", label: "Básico" },
-  { id: "cloze", label: "Ocultar trecho" },
-  { id: "image", label: "Imagem-print" },
+const TABS: Array<{ id: TabId; label: string; shortLabel: string }> = [
+  { id: "basic", label: "Pergunta e resposta", shortLabel: "P & R" },
+  { id: "cloze", label: "Ocultar trecho", shortLabel: "Ocultar" },
+  { id: "image", label: "A partir de um print", shortLabel: "Print" },
 ];
+
+const KICKER = "text-[11px] uppercase tracking-[0.1em] font-semibold";
 
 /**
  * Dispatcher de paste/drop por instância de editor (registrado em efeito —
@@ -101,11 +112,33 @@ function plural(n: number, singular: string, pluralForm: string): string {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
+/** Frente do card cloze com a lacuna como barra sobre --track (spec C.5). */
+function GapText({ text }: { text: string }) {
+  const parts = text.split("[...]");
+  return (
+    <>
+      {parts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 ? (
+            <span
+              role="img"
+              aria-label="trecho oculto"
+              className="mx-0.5 inline-block h-3 w-10 translate-y-0.5 bg-track"
+            />
+          ) : null}
+          {part}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 export function NoteEditorScreen({
   deckId,
   deckName,
   maxBytes,
   tagSuggestions,
+  backHref,
   editNote,
 }: NoteEditorScreenProps) {
   const router = useRouter();
@@ -129,6 +162,7 @@ export function NoteEditorScreen({
   );
   const [selectedCloze, setSelectedCloze] = useState<SelectedCloze | null>(null);
   const [preview, setPreview] = useState<PreviewCard[]>([]);
+  const [basicPreview, setBasicPreview] = useState<BasicNoteContent | null>(null);
   const [focusedField, setFocusedField] = useState<"front" | "back" | "text">("front");
   const { toasts, push, dismiss } = useToasts();
 
@@ -168,7 +202,7 @@ export function NoteEditorScreen({
     () => [
       ...editorExtensions({
         mode: "cloze",
-        placeholder: "Cole ou digite o texto; selecione um trecho e use “Ocultar”",
+        placeholder: "Cole ou digite o texto; selecione um trecho e use “Ocultar trecho”",
       }),
       makeFileHandlerExtension(),
     ],
@@ -229,6 +263,41 @@ export function NoteEditorScreen({
     onUpdate: ({ editor }) => schedulePreview(editor),
     onFocus: () => setFocusedField("text"),
   });
+
+  // --- prévia do card básico no aside (debounce ~300ms) ---
+
+  const basicPreviewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleBasicPreview = useCallback(() => {
+    if (basicPreviewTimer.current) clearTimeout(basicPreviewTimer.current);
+    basicPreviewTimer.current = setTimeout(() => {
+      if (!frontEditor || !backEditor) return;
+      const frontJson = frontEditor.getJSON();
+      const backJson = backEditor.getJSON();
+      if (!docHasVisibleContent(frontJson) && !docHasVisibleContent(backJson)) {
+        setBasicPreview(null);
+        return;
+      }
+      try {
+        setBasicPreview(pmDocsToNoteContent("basic", { front: frontJson, back: backJson }));
+      } catch {
+        setBasicPreview(null);
+      }
+    }, 300);
+  }, [frontEditor, backEditor]);
+
+  useEffect(() => {
+    if (!frontEditor || !backEditor) return;
+    const handler = () => scheduleBasicPreview();
+    frontEditor.on("update", handler);
+    backEditor.on("update", handler);
+    // Estado inicial (modo edição já chega com conteúdo).
+    scheduleBasicPreview();
+    return () => {
+      frontEditor.off("update", handler);
+      backEditor.off("update", handler);
+      if (basicPreviewTimer.current) clearTimeout(basicPreviewTimer.current);
+    };
+  }, [frontEditor, backEditor, scheduleBasicPreview]);
 
   // Foco inicial no campo principal (fluxo contínuo começa digitando).
   const didInitialFocus = useRef(false);
@@ -412,7 +481,8 @@ export function NoteEditorScreen({
       if (collectGroupKeysFromDoc(textJson).length === 0) {
         push({
           kind: "error",
-          message: "selecione um trecho e use “Ocultar” para criar pelo menos uma ocultação",
+          message:
+            "selecione um trecho e use “Ocultar trecho” para criar pelo menos uma ocultação",
         });
         clozeEditor.commands.focus();
         return;
@@ -518,182 +588,274 @@ export function NoteEditorScreen({
 
   const showBasicPanel = currentKind === "basic";
 
+  const renderOpts = { mediaUrl };
+
+  const asidePreview =
+    currentKind === "basic" ? (
+      <section aria-label="Prévia do card">
+        <h2 className={KICKER}>Prévia</h2>
+        <div className="mt-2 border border-border bg-surface p-3 text-sm">
+          {basicPreview ? (
+            renderNoteContent(basicPreview, renderOpts)
+          ) : (
+            <p className="text-muted-foreground">
+              Escreva na frente para ver aqui a prévia do card.
+            </p>
+          )}
+        </div>
+      </section>
+    ) : (
+      <section aria-label="Prévia dos cards que serão criados">
+        <h2 className={KICKER}>Prévia</h2>
+        <div className="mt-2 border border-border bg-surface p-3 text-sm">
+          Este texto criará{" "}
+          <span className="font-extrabold">{preview.length}</span>{" "}
+          {preview.length === 1 ? "card" : "cards"}
+        </div>
+        {preview.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Oculte um trecho para ver aqui os cards que serão criados.
+          </p>
+        ) : (
+          <ol className="mt-2 space-y-2">
+            {preview.map((card) => (
+              <li key={card.groupKey} className="border border-border bg-surface p-3 text-sm">
+                <p>
+                  <GapText text={card.frontText} />
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Resposta:{" "}
+                  <span className="font-semibold text-foreground">{card.answerText}</span>
+                  {card.hint ? ` · Dica: ${card.hint}` : ""}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    );
+
   return (
     <div onKeyDownCapture={onKeyDownCapture} className="pb-4">
-      {!isEdit ? (
-        <div
-          role="tablist"
-          aria-label="Modo de criação"
-          onKeyDown={onTabListKeyDown}
-          className="flex gap-1 rounded-lg border border-border bg-muted p-1"
-        >
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              ref={(el) => {
-                tabRefs.current[t.id] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={tab === t.id}
-              aria-controls={t.id === "cloze" ? "panel-cloze" : "panel-basic"}
-              tabIndex={tab === t.id ? 0 : -1}
-              onClick={() => switchTab(t.id)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${
-                tab === t.id ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Tipo da nota:{" "}
-          <span className="font-medium text-foreground">
-            {currentKind === "basic" ? "Básico" : "Ocultar trecho (cloze)"}
-          </span>{" "}
-          — o tipo não muda na edição.
-        </p>
-      )}
-
-      {showBasicPanel ? (
-        <div
-          role={isEdit ? undefined : "tabpanel"}
-          id="panel-basic"
-          aria-labelledby={isEdit ? undefined : `tab-${tab}`}
-          className="mt-4 space-y-4"
-        >
-          {tab === "image" && !isEdit ? (
-            <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-              Cole um print (Cmd/Ctrl+V) na frente ou no verso — ou arraste o arquivo, ou use o
-              botão “Imagem” da barra.
-            </p>
-          ) : null}
-          <div>
-            <span className="mb-1 block text-sm font-medium" id="label-front">
-              Frente
-            </span>
-            <div
-              className="rounded-lg border border-border bg-background focus-within:outline-2 focus-within:outline-ring"
-              onKeyDownCapture={(e) => {
-                // Tab avança Frente → Verso (aceite F2#1); Shift+Tab segue o fluxo nativo.
-                if (e.key === "Tab" && !e.shiftKey) {
-                  e.preventDefault();
-                  backEditor?.commands.focus();
-                }
-              }}
-            >
-              <EditorContent editor={frontEditor} aria-labelledby="label-front" />
-            </div>
-          </div>
-          <div>
-            <span className="mb-1 block text-sm font-medium" id="label-back">
-              Verso
-            </span>
-            <div
-              className="rounded-lg border border-border bg-background focus-within:outline-2 focus-within:outline-ring"
-              onKeyDownCapture={(e) => {
-                if (e.key === "Tab" && e.shiftKey) {
-                  e.preventDefault();
-                  frontEditor?.commands.focus();
-                }
-              }}
-            >
-              <EditorContent editor={backEditor} aria-labelledby="label-back" />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div
-          role={isEdit ? undefined : "tabpanel"}
-          id="panel-cloze"
-          aria-labelledby={isEdit ? undefined : "tab-cloze"}
-          className="mt-4 space-y-4"
-        >
-          <div>
-            <span className="mb-1 block text-sm font-medium" id="label-cloze">
-              Texto com ocultações
-            </span>
-            <div className="rounded-lg border border-border bg-background focus-within:outline-2 focus-within:outline-ring">
-              <EditorContent editor={clozeEditor} aria-labelledby="label-cloze" />
-            </div>
-          </div>
-
-          {selectedCloze ? (
-            <div
-              role="group"
-              aria-label={`Ocultação ${selectedCloze.groupKey} selecionada`}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm"
-            >
-              <span>
-                Ocultação <span className="font-mono">{selectedCloze.groupKey}</span>
-                {selectedCloze.hint ? ` — dica: ${selectedCloze.hint}` : ""}
-              </span>
-              <button
-                type="button"
-                onClick={removeSelectedCloze}
-                className="rounded-md border border-border bg-background px-2 py-1 outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                Remover ocultação
-              </button>
-              <button
-                type="button"
-                onClick={editSelectedClozeHint}
-                className="rounded-md border border-border bg-background px-2 py-1 outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                {selectedCloze.hint ? "Trocar dica" : "Adicionar dica"}
-              </button>
-              <button
-                type="button"
-                aria-label="Fechar painel da ocultação"
-                onClick={() => setSelectedCloze(null)}
-                className="ml-auto text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
-
-          <section
-            aria-label="Prévia dos cards que serão criados"
-            className="rounded-lg border border-border bg-card p-3"
+      {backHref ? (
+        <div className="mb-5 flex items-baseline justify-between gap-3">
+          <Link
+            href={backHref}
+            className="truncate text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
           >
-            <h2 className="text-sm font-semibold">
-              Prévia — {plural(preview.length, "card", "cards")}
-            </h2>
-            {preview.length === 0 ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Oculte um trecho para ver aqui os cards que serão criados.
-              </p>
-            ) : (
-              <ol className="mt-2 space-y-2">
-                {preview.map((card) => (
-                  <li
-                    key={card.groupKey}
-                    className="rounded-md border border-border bg-background p-2 text-sm"
-                  >
-                    <p>{card.frontText}</p>
-                    <p className="mt-1 text-muted-foreground">
-                      Resposta: <span className="text-foreground">{card.answerText}</span>
-                      {card.hint ? ` · Dica: ${card.hint}` : ""}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
+            ← {deckName}
+          </Link>
+          {!isEdit ? (
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {plural(sessionCards, "card criado", "cards criados")}
+            </span>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
-      <div className="mt-4">
-        <TagInput tags={tags} onChange={setTags} suggestions={tagSuggestions} />
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+        <div className="min-w-0">
+          {!isEdit ? (
+            <div
+              role="tablist"
+              aria-label="Modo de criação"
+              onKeyDown={onTabListKeyDown}
+              className="flex border border-border"
+            >
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  ref={(el) => {
+                    tabRefs.current[t.id] = el;
+                  }}
+                  type="button"
+                  role="tab"
+                  id={`tab-${t.id}`}
+                  aria-selected={tab === t.id}
+                  aria-controls={t.id === "cloze" ? "panel-cloze" : "panel-basic"}
+                  tabIndex={tab === t.id ? 0 : -1}
+                  onClick={() => switchTab(t.id)}
+                  className={`min-h-11 flex-1 border-l border-border px-2 first:border-l-0 ${KICKER} transition-colors duration-150 ease-out ${
+                    tab === t.id
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="sm:hidden">{t.shortLabel}</span>
+                  <span className="hidden sm:inline">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Tipo da nota:{" "}
+              <span className="font-semibold text-foreground">
+                {currentKind === "basic" ? "Pergunta e resposta" : "Ocultar trecho (cloze)"}
+              </span>{" "}
+              — o tipo não muda na edição.
+            </p>
+          )}
+
+          {showBasicPanel ? (
+            <div
+              role={isEdit ? undefined : "tabpanel"}
+              id="panel-basic"
+              aria-labelledby={isEdit ? undefined : `tab-${tab}`}
+              className="mt-6 space-y-6"
+            >
+              {tab === "image" && !isEdit ? (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const files = Array.from(e.dataTransfer.files);
+                    if (files.length > 0) {
+                      const ed = activeEditorForImages();
+                      if (ed) void handleFiles(ed, files);
+                    }
+                  }}
+                  className="border-2 border-divider p-4 text-sm"
+                >
+                  {pendingUploads > 0 ? (
+                    <p role="status" className="font-semibold">
+                      Enviando e validando {plural(pendingUploads, "imagem", "imagens")}…
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-semibold">
+                        Cole um print (Cmd/Ctrl+V) na frente ou no verso
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        … ou arraste o arquivo até aqui, ou{" "}
+                        <label className="cursor-pointer font-semibold text-primary-text underline underline-offset-4">
+                          escolha um arquivo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files ?? []);
+                              e.target.value = "";
+                              if (files.length > 0) {
+                                const ed = activeEditorForImages();
+                                if (ed) void handleFiles(ed, files);
+                              }
+                            }}
+                          />
+                        </label>
+                        .
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : null}
+              <div className="border-t-2 border-divider pt-2">
+                <span className={`block ${KICKER}`} id="label-front">
+                  Frente
+                </span>
+                <div
+                  onKeyDownCapture={(e) => {
+                    // Tab avança Frente → Verso (aceite F2#1); Shift+Tab segue o fluxo nativo.
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      backEditor?.commands.focus();
+                    }
+                  }}
+                >
+                  <EditorContent editor={frontEditor} aria-labelledby="label-front" />
+                </div>
+              </div>
+              <div className="border-t-2 border-divider pt-2">
+                <span className={`block ${KICKER}`} id="label-back">
+                  Verso
+                </span>
+                <div
+                  onKeyDownCapture={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      frontEditor?.commands.focus();
+                    }
+                  }}
+                >
+                  <EditorContent editor={backEditor} aria-labelledby="label-back" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              role={isEdit ? undefined : "tabpanel"}
+              id="panel-cloze"
+              aria-labelledby={isEdit ? undefined : "tab-cloze"}
+              className="mt-6 space-y-6"
+            >
+              <div className="border-t-2 border-divider pt-2">
+                <span className={`block ${KICKER}`} id="label-cloze">
+                  Selecione o que quer lembrar
+                </span>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Cole ou escreva o texto — depois selecione o que quer lembrar.
+                </p>
+                <EditorContent editor={clozeEditor} aria-labelledby="label-cloze" />
+              </div>
+
+              {selectedCloze ? (
+                <div
+                  role="group"
+                  aria-label={`Ocultação ${selectedCloze.groupKey} selecionada`}
+                  className="flex flex-wrap items-center gap-2 border border-border bg-surface px-3 py-2 text-sm"
+                >
+                  <span>
+                    Ocultação <span className="font-mono">{selectedCloze.groupKey}</span>
+                    {selectedCloze.hint ? ` — dica: ${selectedCloze.hint}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removeSelectedCloze}
+                    className="min-h-11 border border-border bg-background px-3 transition-colors duration-150 ease-out hover:bg-surface"
+                  >
+                    Remover ocultação
+                  </button>
+                  <button
+                    type="button"
+                    onClick={editSelectedClozeHint}
+                    className="min-h-11 border border-border bg-background px-3 transition-colors duration-150 ease-out hover:bg-surface"
+                  >
+                    {selectedCloze.hint ? "Trocar dica" : "Adicionar dica"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Fechar painel da ocultação"
+                    onClick={() => setSelectedCloze(null)}
+                    className="ml-auto min-h-11 min-w-11 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Aside: prévia + tags (desktop 340px com régua à esquerda; mobile abaixo). */}
+        <aside className="mt-10 lg:mt-0 lg:border-l lg:border-border lg:pl-8">
+          {asidePreview}
+
+          <div className="mt-8">
+            <TagInput tags={tags} onChange={setTags} suggestions={tagSuggestions} />
+          </div>
+
+          <p
+            className="mt-8 cursor-default text-sm text-muted-foreground"
+            title="Assistente de criação com IA — em breve"
+          >
+            ✳ Em breve o assistente vai sugerir cards a partir do seu texto.
+          </p>
+        </aside>
       </div>
 
       {/* Toolbar + salvar: sticky bottom (teclado virtual mobile, R10/#6571). */}
       <div
-        className="sticky bottom-0 z-40 mt-6 -mx-4 border-t border-border bg-background px-4 pt-3"
+        className="sticky bottom-0 z-40 mt-8 -mx-5 border-t-2 border-divider bg-background px-5 pt-3"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
         <EditorToolbar
@@ -712,14 +874,18 @@ export function NoteEditorScreen({
             if (ed) void handleFiles(ed, files);
           }}
         />
-        <div className="mt-2 flex items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => void handleSave()}
             disabled={saving}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground outline-offset-2 transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60"
+            className={`min-h-12 w-full px-6 text-sm font-semibold transition-colors duration-150 ease-out disabled:opacity-60 sm:w-auto ${
+              isEdit
+                ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+                : "border border-border bg-background hover:bg-surface"
+            }`}
           >
-            {saving ? "Salvando…" : isEdit ? "Salvar alterações" : "Salvar card"}
+            {saving ? "Salvando…" : isEdit ? "Salvar alterações" : "Salvar e continuar"}
           </button>
           <kbd className="hidden text-xs text-muted-foreground sm:inline">Cmd/Ctrl+Enter</kbd>
           <span className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">

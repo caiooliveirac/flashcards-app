@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { submitReview } from "./service";
+import { getNextDueAt } from "./summary-queries";
 
 const submitSchema = z.object({
   cardId: z.uuid(),
@@ -35,5 +36,29 @@ export async function submitReviewAction(input: unknown): Promise<SubmitReviewAc
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "erro ao salvar revisão" };
+  }
+}
+
+const nextReviewSchema = z.object({ deckId: z.uuid() });
+
+export type NextReviewActionResult =
+  | { ok: true; nextDueAt: string | null }
+  | { ok: false };
+
+/** Próxima revisão do deck (min due_at futuro) para o resumo da sessão. */
+export async function nextReviewAtAction(input: unknown): Promise<NextReviewActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false };
+  }
+  const parsed = nextReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false };
+  }
+  try {
+    const nextDueAt = await getNextDueAt(session.user.id, parsed.data);
+    return { ok: true, nextDueAt: nextDueAt ? nextDueAt.toISOString() : null };
+  } catch {
+    return { ok: false };
   }
 }

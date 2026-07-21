@@ -15,6 +15,10 @@ import {
  * Lista de notas do deck detail com menu por nota (Editar/Duplicar/Mover/
  * Excluir com desfazer). Client component: o toast "Desfazer" precisa
  * sobreviver ao refresh da lista — o host vive aqui, não no item.
+ *
+ * Redesign "Editorial Cognition": índice de regras (linhas separadas por
+ * réguas de 1px, sem caixas) — desktop em grid 90px/1fr/200px/150px
+ * (nº+tipo · conteúdo · tags · edição) + coluna estreita para o menu.
  */
 
 export interface NoteRow {
@@ -36,8 +40,10 @@ export interface NotesListProps {
   decks: DeckOption[];
 }
 
+const KICKER = "text-[11px] font-semibold uppercase tracking-[0.1em]";
+
 const itemClass =
-  "block w-full rounded-md px-3 py-1.5 text-left text-sm outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring";
+  "block w-full px-3 py-2.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-surface";
 
 interface NoteMenuProps {
   note: NoteRow;
@@ -93,14 +99,14 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-border px-2 py-1 text-sm outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex h-11 w-11 items-center justify-center border border-border text-sm leading-none transition-colors duration-150 ease-out hover:bg-surface"
       >
         ⋯
       </button>
       {open ? (
         <div
           id={panelId}
-          className="absolute right-0 z-30 mt-1 w-56 rounded-lg border border-border bg-card p-1 shadow-lg"
+          className="absolute right-0 z-30 mt-1 w-56 border border-divider bg-background p-1 shadow-lg"
         >
           <Link href={`/notes/${note.id}/edit`} className={itemClass}>
             Editar
@@ -127,14 +133,17 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
           ) : null}
           {moving ? (
             <div className="space-y-2 px-3 py-2">
-              <label htmlFor={selectId} className="block text-xs font-medium">
+              <label
+                htmlFor={selectId}
+                className={`block ${KICKER} text-muted-foreground`}
+              >
                 Baralho de destino
               </label>
               <select
                 id={selectId}
                 value={targetDeck}
                 onChange={(e) => setTargetDeck(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+                className="min-h-11 w-full border-b border-border bg-surface px-2 py-1.5 text-sm"
               >
                 <option value="">Escolha…</option>
                 {decks.map((d) => (
@@ -150,7 +159,7 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
                   close();
                   onMove(note.id, targetDeck);
                 }}
-                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground outline-offset-2 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+                className="min-h-11 bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover disabled:opacity-50"
               >
                 Mover
               </button>
@@ -226,42 +235,68 @@ export function NotesList({ notes, decks }: NotesListProps) {
 
   return (
     <>
-      <ul className="mt-4 space-y-3">
-        {notes.map((note) => (
-          <li
-            key={note.id}
-            className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <p className="line-clamp-2 min-w-0 text-sm">
-                {note.preview || <span className="text-muted-foreground">(sem texto)</span>}
-              </p>
-              <NoteMenu
-                note={note}
-                decks={decks}
-                onDuplicate={(id) => void handleDuplicate(id)}
-                onMove={(id, target) => void handleMove(id, target)}
-                onDelete={(id) => void handleDelete(id)}
-              />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground">
-                {note.typeLabel}
-              </span>
-              {note.cardCount !== null ? (
-                <span>
-                  {note.cardCount} {note.cardCount === 1 ? "card" : "cards"}
-                </span>
-              ) : null}
-              {note.tags.map((tag) => (
-                <span key={tag} className="rounded-md bg-muted px-1.5 py-0.5">
-                  {tag}
-                </span>
-              ))}
-              <span className="ml-auto">{note.updatedAtLabel}</span>
-            </div>
-          </li>
-        ))}
+      <div
+        aria-hidden="true"
+        className={`mt-10 hidden border-b-2 border-divider pb-2 text-muted-foreground md:grid md:grid-cols-[90px_minmax(0,1fr)_200px_150px_44px] md:gap-x-4 ${KICKER}`}
+      >
+        <span>Nº</span>
+        <span>Conteúdo</span>
+        <span>Tags</span>
+        <span>Edição</span>
+        <span />
+      </div>
+      <ul className="mt-4 md:mt-0">
+        {notes.map((note, index) => {
+          const number = `#${String(index + 1).padStart(2, "0")}`;
+          return (
+            <li
+              key={note.id}
+              className="border-b border-border transition-colors duration-150 ease-out hover:bg-surface"
+            >
+              <div className="flex items-start gap-3 py-4 md:grid md:grid-cols-[90px_minmax(0,1fr)_200px_150px_44px] md:gap-x-4">
+                <div className="hidden md:block">
+                  <p className="text-sm font-extrabold tabular-nums">{number}</p>
+                  <p className={`mt-1 ${KICKER} text-muted-foreground`}>{note.typeLabel}</p>
+                  {note.cardCount !== null ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {note.cardCount} {note.cardCount === 1 ? "card" : "cards"}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm leading-relaxed">
+                    {note.preview || <span className="text-muted-foreground">(sem texto)</span>}
+                  </p>
+                  <p className={`mt-2 ${KICKER} text-muted-foreground md:hidden`}>
+                    {[
+                      `${number} · ${note.typeLabel}`,
+                      note.cardCount !== null
+                        ? `${note.cardCount} ${note.cardCount === 1 ? "card" : "cards"}`
+                        : null,
+                      note.tags.length > 0 ? note.tags.join(", ") : null,
+                      note.updatedAtLabel,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <p className="hidden truncate text-xs text-muted-foreground md:block">
+                  {note.tags.length > 0 ? note.tags.join(", ") : "—"}
+                </p>
+                <p className="hidden text-xs tabular-nums text-muted-foreground md:block">
+                  {note.updatedAtLabel}
+                </p>
+                <NoteMenu
+                  note={note}
+                  decks={decks}
+                  onDuplicate={(id) => void handleDuplicate(id)}
+                  onMove={(id, target) => void handleMove(id, target)}
+                  onDelete={(id) => void handleDelete(id)}
+                />
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <ToastHost toasts={toasts} dismiss={dismiss} />
     </>

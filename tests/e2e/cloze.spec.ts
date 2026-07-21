@@ -72,7 +72,8 @@ test("nota cloze com 2 grupos gera 2 cards (teclado)", async ({ page }) => {
   const previewSection = page.getByRole("region", {
     name: "Prévia dos cards que serão criados",
   });
-  await expect(previewSection.getByRole("heading")).toHaveText("Prévia — 2 cards");
+  await expect(previewSection.getByRole("heading")).toHaveText("Prévia");
+  await expect(previewSection).toContainText("Este texto criará 2 cards");
   await expect(previewSection.getByRole("listitem")).toHaveCount(2);
 
   // Salva pelo teclado; contador da sessão registra os 2 cards.

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectAuthenticatedHome } from "./helpers";
 
 /**
  * Fluxo MVP completo em produção: login → criar baralho → criar card básico →
@@ -9,25 +10,33 @@ import { expect, test } from "@playwright/test";
 
 const DECK_NAME = `Demo cliente ${Date.now()}`;
 
+// Sessão limpa: o storageState autenticado do projeto faria /login redirecionar
+// para a home antes de o form aparecer.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test("fluxo MVP ponta a ponta em produção", async ({ page }) => {
+  test.skip(
+    !process.env.PROD_SMOKE,
+    "Smoke de produção (cria deck de demo e usa caio/1234) — rode com PROD_SMOKE=1 apontando o baseURL para produção",
+  );
   // 1. Login
   await page.goto("/login");
   await page.getByLabel(/usuário/i).fill("caio");
   await page.getByLabel(/senha/i).fill("1234");
   await page.getByRole("button", { name: /entrar/i }).click();
-  await expect(page.getByRole("heading", { name: "Seus baralhos" })).toBeVisible();
+  await expectAuthenticatedHome(page);
 
   // 2. Criar baralho
   await page.getByRole("link", { name: "Novo baralho" }).click();
   await page.getByLabel(/nome/i).fill(DECK_NAME);
   await page.getByRole("button", { name: /criar/i }).click();
-  await expect(page.getByRole("heading", { name: "Seus baralhos" })).toBeVisible();
-  const deckCard = page.locator("li", { hasText: DECK_NAME });
+  await expectAuthenticatedHome(page);
+  const deckCard = page.locator("article", { hasText: DECK_NAME });
   await expect(deckCard).toBeVisible();
 
-  // 3. Adicionar card básico
-  await deckCard.getByRole("link", { name: /abrir baralho/i }).click();
-  await page.getByRole("link", { name: "Adicionar cards" }).first().click();
+  // 3. Adicionar card básico (deck vazio → CTA "Criar primeiro card")
+  await deckCard.getByRole("link", { name: DECK_NAME, exact: true }).click();
+  await page.getByRole("link", { name: "Criar primeiro card" }).click();
   const front = page.locator('[aria-label="Frente do card"] .tiptap, [data-testid="front-editor"] .tiptap').first();
   const anyEditor = page.locator(".tiptap").first();
   const frontEditor = (await front.count()) > 0 ? front : anyEditor;
@@ -46,32 +55,34 @@ test("fluxo MVP ponta a ponta em produção", async ({ page }) => {
   await page.keyboard.press("Home");
   await page.keyboard.press("Shift+Control+ArrowRight");
   await page.keyboard.press("Control+Shift+KeyC");
-  await expect(page.getByText(/prévia — 1 card/i)).toBeVisible();
+  await expect(page.getByText(/criará 1 card/)).toBeVisible();
   await page.keyboard.press("Control+Enter");
   await expect(page.getByText(/2 cards criados/i)).toBeVisible();
 
-  // 5. Home mostra contagens e o botão Revisar
+  // 5. Home mostra contagens ("□ Crescendo · 2 novos" + meta "2 cards · 2 novos")
   await page.goto("/");
-  const deckAfter = page.locator("li", { hasText: DECK_NAME });
-  await expect(deckAfter.getByText(/2 novos/)).toBeVisible();
-  await expect(deckAfter.getByText(/0 a revisar/)).toBeVisible();
+  const deckAfter = page.locator("article", { hasText: DECK_NAME });
+  await expect(deckAfter.getByText(/2 novos/).first()).toBeVisible();
+  await expect(deckAfter.getByText("a revisar")).toBeVisible();
 
-  // 6–10. Sessão de revisão: revelar e avaliar os 2 cards
-  await deckAfter.getByRole("link", { name: "Revisar" }).click();
-  await expect(page.getByText(/card 1 de 2/i)).toBeVisible();
+  // 6–10. Sessão de revisão via deck detail ("Estudar novos — 2"): revelar e avaliar
+  await deckAfter.getByRole("link", { name: DECK_NAME, exact: true }).click();
+  await page.getByRole("link", { name: /Estudar novos — 2/ }).click();
+  await expect(page.getByText("1 de 2", { exact: true })).toBeVisible();
   await page.keyboard.press("Space");
   await expect(page.getByRole("group", { name: /avaliar resposta/i })).toBeVisible();
   await page.getByRole("button", { name: /^Bom/ }).click();
-  await expect(page.getByText(/card 2 de 2/i)).toBeVisible();
+  await expect(page.getByText("2 de 2", { exact: true })).toBeVisible();
   await page.keyboard.press("Space");
   await page.keyboard.press("Digit3");
 
-  // 11. Resumo da sessão
-  await expect(page.getByRole("heading", { name: /revisão concluída/i })).toBeVisible();
-  await expect(page.getByText(/você revisou 2 cards/i)).toBeVisible();
+  // 11. Resumo da sessão ("Sessão concluída" + "2 cards em ~X minutos")
+  await expect(page.getByText("Sessão concluída")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /2 cards em/ })).toBeVisible();
 
   // 12. Home atualizada: nada novo pendente (cards em learning, due ~minutos)
   await page.getByRole("link", { name: "Voltar aos baralhos" }).click();
-  const deckDone = page.locator("li", { hasText: DECK_NAME });
-  await expect(deckDone.getByText(/0 novos/)).toBeVisible();
+  const deckDone = page.locator("article", { hasText: DECK_NAME });
+  await expect(deckDone).toBeVisible();
+  await expect(deckDone.getByText(/novos/)).toHaveCount(0);
 });

@@ -1,4 +1,16 @@
 import { expect, type Page } from "@playwright/test";
+import { BRAND } from "../../src/lib/brand";
+
+/**
+ * Home autenticada: a marca no header global é um link para "/" (presente em
+ * todos os viewports; o h1 da home é a manchete dinâmica, sem copy estável).
+ */
+export async function expectAuthenticatedHome(page: Page): Promise<void> {
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: `${BRAND}.` }),
+  ).toBeVisible({ timeout: 15_000 });
+}
 
 /**
  * Helpers compartilhados dos E2E da Fase 2.
@@ -33,23 +45,20 @@ export async function loginViaForm(
   await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
   // Sucesso: redirect para a home autenticada.
-  await expect(page.getByRole("heading", { name: "Seus baralhos" })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expectAuthenticatedHome(page);
 }
 
 /**
  * Cria um deck pela UI (/decks/new) e devolve o deckId.
- * createDeckAction redireciona para "/" — o id é extraído do link "Abrir".
+ * createDeckAction redireciona para "/" — o id é extraído do link do nome do
+ * deck na célula (redesign: o nome é o link para /decks/[id]).
  */
 export async function createDeckViaUi(page: Page, name: string): Promise<string> {
   await page.goto("/decks/new");
   await page.getByLabel("Nome").fill(name);
   await page.getByRole("button", { name: "Criar baralho" }).click();
-  await expect(page.getByRole("heading", { name: "Seus baralhos" })).toBeVisible({
-    timeout: 15_000,
-  });
-  const openLink = page.getByRole("link", { name: `Abrir baralho ${name}` });
+  await expectAuthenticatedHome(page);
+  const openLink = page.getByRole("link", { name, exact: true });
   await expect(openLink).toBeVisible();
   const href = await openLink.getAttribute("href");
   const match = href?.match(/^\/decks\/([0-9a-f-]{36})$/i);

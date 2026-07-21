@@ -30,11 +30,11 @@ test("axe sem violações críticas nas telas da Fase 2", async ({ page }, testI
   const scans: ScanResult[] = [];
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Seus baralhos" })).toBeVisible();
+  await expect(page.locator("h1")).toBeVisible();
   scans.push(await scan(page, "/"));
 
   await page.goto("/decks/new");
-  await expect(page.getByRole("heading", { name: "Novo baralho" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Comece um novo assunto." })).toBeVisible();
   scans.push(await scan(page, "/decks/new"));
 
   await page.goto(`/decks/${deckId}`);
@@ -42,11 +42,14 @@ test("axe sem violações críticas nas telas da Fase 2", async ({ page }, testI
   scans.push(await scan(page, "deck detail"));
 
   await page.goto(`/decks/${deckId}/new`);
-  await expect(page.getByRole("tab", { name: "Básico" })).toBeVisible();
+  // Nomes acessíveis mudam com o viewport (labels curtos no mobile).
+  const qaTab = page.getByRole("tab", { name: /^(Pergunta e resposta|P & R)$/ });
+  const clozeTab = page.getByRole("tab", { name: /^Ocultar( trecho)?$/ });
+  await expect(qaTab).toBeVisible();
   scans.push(await scan(page, "editor (básico)"));
 
-  await page.getByRole("tab", { name: "Ocultar trecho" }).click();
-  await expect(page.getByRole("tab", { name: "Ocultar trecho" })).toHaveAttribute(
+  await clozeTab.click();
+  await expect(clozeTab).toHaveAttribute(
     "aria-selected",
     "true",
   );

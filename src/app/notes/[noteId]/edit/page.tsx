@@ -46,26 +46,26 @@ export default async function EditNotePage({
   const initialDocs = noteContentToPmDocs(note.content);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
+    <main className="mx-auto max-w-5xl px-5 py-6">
       <div className="min-w-0">
         <Link
           href={`/decks/${note.deckId}`}
-          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          className="text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
         >
           ← {deck.name}
         </Link>
-        <h1 className="mt-1 text-xl font-semibold">Editar nota</h1>
+        <h1 className="mt-2 text-xl font-extrabold tracking-tight">Editar nota</h1>
       </div>
 
       <p
         role="note"
-        className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+        className="mt-4 border border-border bg-surface px-3 py-2 text-sm text-muted-foreground"
       >
         Editar preserva o progresso dos cards cujo grupo ou conteúdo se mantém; ocultações
         removidas têm os cards desativados (nunca apagados).
       </p>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <NoteEditorScreen
           deckId={note.deckId}
           deckName={deck.name}

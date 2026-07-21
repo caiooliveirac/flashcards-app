@@ -1,49 +1,85 @@
 @import "tailwindcss";
 
 /*
- * Tokens do design system — definidos desde a Fase 1 (dark mode não é retrofit).
- * Nomeação semântica; os valores concretos evoluem na Fase 2 com o design real.
+ * Tokens do design system — redesign "Editorial Cognition" (handoff Claude Design).
+ * Nomeação semântica mantida; valores trocados. Dark mode é tema próprio, não inversão.
+ * Accent (#ec3013) só onde há urgência ou ação primária — nunca decorativo.
  */
 :root {
-  --background: oklch(0.985 0.002 90);
-  --foreground: oklch(0.24 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.01 260);
-  --muted: oklch(0.955 0.004 90);
-  --muted-foreground: oklch(0.5 0.01 260);
-  --primary: oklch(0.51 0.15 155);
-  --primary-foreground: oklch(0.985 0.002 90);
-  --border: oklch(0.9 0.005 90);
-  --ring: oklch(0.55 0.15 155);
-  --destructive: oklch(0.55 0.2 25);
+  --background: #f3f2f2;
+  --foreground: #201e1d;
+  --surface: #eae9e9;
+  --card: #f3f2f2;
+  --card-foreground: #201e1d;
+  --muted: #eae9e9;
+  /* Handoff pede ink 58%, mas exige muted ≥ 4,5:1 sobre o canvas (seção F);
+   * 58% dá ~3,9:1 — 66% é o mínimo que cumpre AA (~5,0:1). */
+  --muted-foreground: rgba(32, 30, 29, 0.66);
+  --border: rgba(32, 30, 29, 0.22);
+  --divider: rgba(32, 30, 29, 0.4);
+  --primary: #ec3013;
+  --primary-foreground: #f3f2f2;
+  --primary-hover: #dd2b0f;
+  --primary-text: #ae1800;
+  --study-urgent-bg: #fff2ef;
+  --study-urgent-bg-strong: #ffe0d9;
+  --track: #e3e0df;
+  --ring: #ec3013;
+  --destructive: #ae1800;
 }
 
 .dark {
-  --background: oklch(0.19 0.01 260);
-  --foreground: oklch(0.93 0.005 90);
-  --card: oklch(0.23 0.012 260);
-  --card-foreground: oklch(0.93 0.005 90);
-  --muted: oklch(0.27 0.012 260);
-  --muted-foreground: oklch(0.7 0.01 260);
-  --primary: oklch(0.7 0.14 155);
-  --primary-foreground: oklch(0.19 0.01 260);
-  --border: oklch(0.3 0.012 260);
-  --ring: oklch(0.7 0.14 155);
-  --destructive: oklch(0.65 0.19 25);
+  --background: #181615;
+  --foreground: #f3f2f2;
+  --surface: #221f1e;
+  --card: #181615;
+  --card-foreground: #f3f2f2;
+  --muted: #221f1e;
+  --muted-foreground: rgba(243, 242, 242, 0.62);
+  --border: rgba(243, 242, 242, 0.2);
+  --divider: rgba(243, 242, 242, 0.42);
+  --primary: #ff563c;
+  --primary-foreground: #181615;
+  --primary-hover: #ff6a52;
+  --primary-text: #ff9783;
+  --study-urgent-bg: #311d18;
+  --study-urgent-bg-strong: #3f2119;
+  --track: #2d2a29;
+  --ring: #ff563c;
+  --destructive: #ff9783;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-text: var(--primary-text);
+  --color-urgent: var(--study-urgent-bg);
+  --color-urgent-strong: var(--study-urgent-bg-strong);
+  --color-track: var(--track);
   --color-border: var(--border);
+  --color-divider: var(--divider);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+
+  /* Raio zero em tudo (decisão do handoff); rounded-full permanece para pontos/avatares */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -59,17 +95,32 @@
 body {
   background: var(--color-background);
   color: var(--color-foreground);
+  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.015em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ============================================================
- * Fase 2 — editor (Tiptap) e renderização de conteúdo de notas.
- * Adições no fim do arquivo; nada acima foi alterado.
+ * Editor (Tiptap) e renderização de conteúdo de notas.
+ * "Superfícies de escrita", não campos: sem caixa, régua no topo.
  * ============================================================ */
 
 /* Área editável (classe .tiptap aplicada pelo Tiptap no contenteditable) */
 .tiptap {
   min-height: 6rem;
-  padding: 0.625rem 0.75rem;
+  padding: 18px 0;
+  font-size: 19px;
+  line-height: 1.6;
   outline: none;
   overflow-wrap: anywhere;
 }
@@ -86,15 +137,15 @@ body {
 }
 
 .tiptap h1 {
-  font-size: 1.25rem;
+  font-size: 1.25em;
 }
 
 .tiptap h2 {
-  font-size: 1.125rem;
+  font-size: 1.125em;
 }
 
 .tiptap h3 {
-  font-size: 1rem;
+  font-size: 1em;
 }
 
 /* Preflight do Tailwind zera listas — restaura dentro do editor */
@@ -111,9 +162,8 @@ body {
 }
 
 .tiptap pre {
-  background: var(--color-muted);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   margin: 0.375rem 0;
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -122,8 +172,7 @@ body {
 }
 
 .tiptap code {
-  background: var(--color-muted);
-  border-radius: 0.25rem;
+  background: var(--color-surface);
   padding: 0.0625rem 0.25rem;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.875em;
@@ -135,15 +184,13 @@ body {
 }
 
 .tiptap mark {
-  background: color-mix(in oklch, var(--color-primary) 25%, transparent);
+  background: var(--study-urgent-bg-strong);
   color: inherit;
-  border-radius: 0.125rem;
 }
 
 .tiptap img {
   max-width: 100%;
   height: auto;
-  border-radius: 0.5rem;
   display: block;
   margin: 0.375rem 0;
 }
@@ -163,36 +210,33 @@ body {
   color: var(--color-muted-foreground);
 }
 
-/* Chip de ocultação DENTRO do editor (node cloze) */
+/* Chip de ocultação DENTRO do editor (node cloze):
+ * fundo tintado + borda inferior 2px accent + índice sobrescrito. */
 .cloze-chip {
-  background: color-mix(in oklch, var(--color-primary) 16%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-primary) 45%, transparent);
-  border-radius: 0.375rem;
-  padding: 0 0.25rem;
+  background: var(--study-urgent-bg-strong);
+  border-bottom: 2px solid var(--primary);
+  padding: 1px 4px;
   cursor: pointer;
 }
 
 .cloze-chip::after {
   /* groupKey visível (g1, g2…) para distinguir grupos sem depender de cor */
   content: " " attr(data-cloze-group);
-  font-size: 0.6875em;
-  font-weight: 600;
-  color: var(--color-primary);
+  font-size: 0.625em;
+  font-weight: 800;
+  color: var(--primary-text);
   vertical-align: super;
 }
 
-/* Estudo/preview (renderNoteContent de @/lib/render) */
+/* Estudo/preview (renderNoteContent de @/lib/render) — lacuna sobre --track */
 .cloze-hidden {
-  background: var(--color-muted);
-  border: 1px dashed var(--color-border);
-  border-radius: 0.375rem;
-  padding: 0 0.375rem;
+  background: var(--track);
+  padding: 0 0.5em;
   color: var(--color-muted-foreground);
 }
 
 .cloze-revealed {
-  background: color-mix(in oklch, var(--color-primary) 16%, transparent);
-  border-radius: 0.375rem;
+  background: var(--study-urgent-bg-strong);
   padding: 0 0.25rem;
 }
 
@@ -203,21 +247,19 @@ body {
 }
 
 .note-back {
-  margin-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-  padding-top: 0.75rem;
+  margin-top: 0.875rem;
+  border-top: 2px solid var(--divider);
+  padding-top: 0.875rem;
 }
 
 .note-image {
   max-width: 100%;
   height: auto;
-  border-radius: 0.5rem;
 }
 
 .note-codeblock {
-  background: var(--color-muted);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875em;
   white-space: pre-wrap;
@@ -226,15 +268,13 @@ body {
 .note-math,
 .note-formula code {
   font-family: var(--font-mono, ui-monospace, monospace);
-  background: var(--color-muted);
-  border-radius: 0.25rem;
+  background: var(--color-surface);
   padding: 0.0625rem 0.25rem;
 }
 
 .note-callout {
   border: 1px solid var(--color-border);
   border-left-width: 4px;
-  border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   margin: 0.375rem 0;
 }
@@ -248,7 +288,7 @@ body {
 }
 
 .note-callout-success {
-  border-left-color: var(--color-primary);
+  border-left-color: oklch(0.55 0.12 155);
 }
 
 .note-callout-danger {

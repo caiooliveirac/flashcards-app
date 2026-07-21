@@ -9,6 +9,9 @@ import { useId } from "react";
  * issue tiptap#6571): botões com preventDefault em onMouseDown para o iOS não
  * perder a seleção/teclado; o container é sticky bottom com safe-area no
  * componente pai. Sem BubbleMenu em touch.
+ *
+ * Redesign: botões ≥44×44px, borda 1px, raio zero; estado ativo em tinta
+ * invertida; ação contextual do cloze ("Ocultar trecho") é o botão primário.
  */
 
 export interface EditorToolbarProps {
@@ -29,9 +32,25 @@ interface ToolbarButtonProps {
   onClick: () => void;
   children: React.ReactNode;
   title?: string;
+  /** "primary" = ação contextual em destaque (accent). */
+  variant?: "default" | "primary";
 }
 
-function ToolbarButton({ label, pressed, disabled, onClick, children, title }: ToolbarButtonProps) {
+function ToolbarButton({
+  label,
+  pressed,
+  disabled,
+  onClick,
+  children,
+  title,
+  variant = "default",
+}: ToolbarButtonProps) {
+  const surface =
+    variant === "primary"
+      ? "border-primary bg-primary text-primary-foreground hover:bg-primary-hover hover:border-primary-hover"
+      : pressed
+        ? "border-foreground bg-foreground text-background"
+        : "border-border bg-background hover:bg-surface";
   return (
     <button
       type="button"
@@ -42,11 +61,7 @@ function ToolbarButton({ label, pressed, disabled, onClick, children, title }: T
       // preventDefault: iOS Safari perde a seleção do editor no mousedown (R10).
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`min-h-9 min-w-9 rounded-md border px-2 text-sm outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40 ${
-        pressed
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-background hover:bg-muted"
-      }`}
+      className={`min-h-11 min-w-11 border px-2.5 text-sm transition-colors duration-150 ease-out disabled:opacity-40 ${surface}`}
     >
       {children}
     </button>
@@ -110,7 +125,7 @@ export function EditorToolbar({ editor, cloze, onFiles }: EditorToolbarProps) {
         pressed={state?.highlight ?? false}
         onClick={() => run((e) => e.chain().focus().toggleHighlight().run())}
       >
-        <span className="rounded bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700">M</span>
+        <span className="bg-urgent-strong px-0.5 text-foreground">M</span>
       </ToolbarButton>
       <ToolbarButton
         label="Título"
@@ -138,7 +153,7 @@ export function EditorToolbar({ editor, cloze, onFiles }: EditorToolbarProps) {
       <label
         htmlFor={fileInputId}
         onMouseDown={(e) => e.preventDefault()}
-        className="min-h-9 cursor-pointer rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-offset-2 hover:bg-muted focus-within:outline-2 focus-within:outline-ring"
+        className="inline-flex min-h-11 cursor-pointer items-center border border-border bg-background px-2.5 text-sm transition-colors duration-150 ease-out hover:bg-surface"
       >
         Imagem
         <input
@@ -159,16 +174,17 @@ export function EditorToolbar({ editor, cloze, onFiles }: EditorToolbarProps) {
           <ToolbarButton
             label="Ocultar trecho selecionado (novo grupo)"
             title="Ocultar trecho (Cmd/Ctrl+Shift+C)"
+            variant="primary"
             onClick={cloze.onHideNew}
           >
-            Ocultar
+            Ocultar trecho
           </ToolbarButton>
           <ToolbarButton
             label="Ocultar no mesmo grupo da última ocultação"
             disabled={!cloze.sameEnabled}
             onClick={cloze.onHideSame}
           >
-            Mesmo grupo
+            Ocultar junto com o anterior
           </ToolbarButton>
         </span>
       ) : null}

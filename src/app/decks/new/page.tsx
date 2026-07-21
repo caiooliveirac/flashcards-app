@@ -1,7 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { SiteHeader } from "@/components/site-header";
 import { createDeckAction } from "@/features/decks/actions";
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
+
+/**
+ * Novo baralho — superfície de escrita do redesign "Editorial Cognition":
+ * cada campo abre com régua de 2px + kicker; inputs raio zero sobre bg-surface.
+ */
+
+const KICKER = "text-[11px] font-semibold uppercase tracking-[0.1em]";
+
+const fieldClass = "border-t-2 border-divider pt-3";
+const labelClass = `block ${KICKER} text-muted-foreground`;
+const inputClass = "mt-2 min-h-11 w-full border-b border-border bg-surface px-3 py-2.5 text-base";
 
 export default async function NewDeckPage({
   searchParams,
@@ -15,59 +27,92 @@ export default async function NewDeckPage({
   const { error } = await searchParams;
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-8">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Novo baralho</h1>
-        <Link href="/" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-          ← voltar
-        </Link>
-      </div>
-
-      <div aria-live="polite">
-        {error ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
+    <div className="min-h-dvh">
+      <SiteHeader>
+        {session.user.role === "admin" ? (
+          <Link href="/admin" className="font-semibold hover:text-primary-text">
+            Admin
+          </Link>
         ) : null}
-      </div>
-
-      <form action={createDeckAction} className="mt-6 space-y-4">
-        <div>
-          <label htmlFor="name" className="mb-1 block text-sm font-medium">
-            Nome
-          </label>
-          <input
-            id="name"
-            name="name"
-            required
-            maxLength={120}
-            autoFocus
-            autoComplete="off"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-          />
-        </div>
-        <div>
-          <label htmlFor="description" className="mb-1 block text-sm font-medium">
-            Descrição <span className="font-normal text-muted-foreground">(opcional)</span>
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            maxLength={2000}
-            rows={3}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground outline-offset-2 transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring"
+        <span className="hidden text-muted-foreground sm:inline">
+          {session.user.email ?? session.user.name}
+        </span>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/login" });
+          }}
         >
-          Criar baralho
-        </button>
-      </form>
-    </main>
+          <button
+            type="submit"
+            className="min-h-11 border border-border px-4 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-surface"
+          >
+            Sair
+          </button>
+        </form>
+      </SiteHeader>
+
+      <main className="mx-auto max-w-xl px-5 py-10">
+        <Link
+          href="/"
+          className="text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
+        >
+          ← Baralhos
+        </Link>
+        <p className={`mt-6 ${KICKER} text-muted-foreground`}>Novo baralho</p>
+        <h1 className="mt-2 text-4xl font-extrabold leading-tight tracking-tight">
+          Comece um novo assunto.
+        </h1>
+        <p className="mt-3 max-w-md text-sm text-muted-foreground">
+          Dê um nome ao baralho — a descrição ajuda a lembrar o recorte do assunto.
+        </p>
+
+        <div aria-live="polite">
+          {error ? (
+            <p
+              role="alert"
+              className="mt-6 border border-destructive px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <form action={createDeckAction} className="mt-10 space-y-8">
+          <div className={fieldClass}>
+            <label htmlFor="name" className={labelClass}>
+              Nome
+            </label>
+            <input
+              id="name"
+              name="name"
+              required
+              maxLength={120}
+              autoFocus
+              autoComplete="off"
+              className={inputClass}
+            />
+          </div>
+          <div className={fieldClass}>
+            <label htmlFor="description" className={labelClass}>
+              Descrição <span className="normal-case tracking-normal">(opcional)</span>
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              maxLength={2000}
+              rows={3}
+              className={inputClass}
+            />
+          </div>
+          <button
+            type="submit"
+            className="inline-flex min-h-12 items-center justify-center bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
+          >
+            Criar baralho
+          </button>
+        </form>
+      </main>
+    </div>
   );
 }

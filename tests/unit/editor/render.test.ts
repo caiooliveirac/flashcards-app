@@ -150,7 +150,7 @@ describe("renderBlocks — blocos restantes e segurança", () => {
     expect(markup).toContain('<code class="language-ts">const a = 1;</code>');
   });
 
-  it("math/formula viram code literal (KaTeX é débito)", () => {
+  it("math/formula renderizam via KaTeX preservando o LaTeX original", () => {
     const markup = renderToStaticMarkup(
       renderBlocks(
         [
@@ -163,8 +163,11 @@ describe("renderBlocks — blocos restantes e segurança", () => {
         { mediaUrl },
       ),
     );
-    expect(markup).toContain('<p class="note-formula"><code>E=mc^2</code></p>');
-    expect(markup).toContain('<code class="note-math">\\pi r^2</code>');
+    // Bloco: formula em display mode; inline: math dentro do parágrafo.
+    expect(markup).toContain('<p class="note-formula"><span class="katex-display">');
+    expect(markup).toContain('encoding="application/x-tex">E=mc^2</annotation>');
+    expect(markup).toContain('<span class="note-math"><span class="katex">');
+    expect(markup).toContain('encoding="application/x-tex">\\pi r^2</annotation>');
   });
 
   it("callout vira div com classes de variante", () => {

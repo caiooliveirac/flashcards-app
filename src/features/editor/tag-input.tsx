@@ -44,21 +44,27 @@ export function TagInput({ tags, onChange, suggestions }: TagInputProps) {
 
   return (
     <div>
-      <label htmlFor={inputId} className="mb-1 block text-sm font-medium">
-        Tags <span className="font-normal text-muted-foreground">(Enter adiciona)</span>
+      <label
+        htmlFor={inputId}
+        className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.1em]"
+      >
+        Tags{" "}
+        <span className="font-normal normal-case tracking-normal text-muted-foreground">
+          — Enter adiciona
+        </span>
       </label>
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 focus-within:outline-2 focus-within:outline-ring">
+      <div className="flex min-h-11 flex-wrap items-center gap-1.5 border border-border bg-surface px-2 py-1.5 transition-colors duration-150 ease-out focus-within:border-foreground">
         {tags.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-sm"
+            className="inline-flex items-center gap-1 bg-track px-2 py-0.5 text-sm"
           >
             {tag}
             <button
               type="button"
               aria-label={`Remover tag ${tag}`}
               onClick={() => onChange(tags.filter((t) => t !== tag))}
-              className="text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              className="text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
             >
               ×
             </button>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
+import { BrandMark } from "@/components/site-header";
 import { auth, isGoogleEnabled, signIn } from "@/lib/auth";
 
 async function credentialsLogin(formData: FormData): Promise<void> {
@@ -35,67 +36,86 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="flex min-h-dvh items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 text-card-foreground shadow-sm">
-        <h1 className="text-2xl font-semibold">Flashcards</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Estude com revisão espaçada. Entre para começar.
-        </p>
-
-        {error ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
-          >
-            Usuário ou senha incorretos.
+    <main className="flex min-h-dvh flex-col lg:flex-row">
+      {/* Metade editorial: marca + manchete sobre memória/estudo. */}
+      <section className="flex flex-col justify-center px-6 py-10 lg:w-1/2 lg:px-14 lg:py-16">
+        <div className="mx-auto w-full max-w-xl">
+          <BrandMark className="text-2xl!" />
+          <h1 className="mt-6 max-w-xl text-[34px] leading-[1.05] font-extrabold tracking-tight text-balance sm:text-[44px] lg:mt-10 lg:text-[52px]">
+            O que você estuda hoje volta na hora certa.
+          </h1>
+          <p className="mt-4 max-w-md text-muted-foreground">
+            Revisão espaçada, sem ruído: cada cartão reaparece quando você está
+            prestes a esquecer.
           </p>
-        ) : null}
+        </div>
+      </section>
 
-        <form className="mt-6 space-y-3" action={credentialsLogin}>
-          <div>
-            <label htmlFor="username" className="mb-1 block text-sm font-medium">
-              Usuário
-            </label>
-            <input
-              id="username"
-              name="username"
-              required
-              autoComplete="username"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium">
-              Senha
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground outline-offset-2 transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            Entrar
-          </button>
-        </form>
+      {/* Metade do formulário, separada por régua central (horizontal no mobile). */}
+      <section className="flex flex-1 flex-col justify-center border-t-2 border-divider px-6 py-10 lg:w-1/2 lg:border-t-0 lg:border-l-2 lg:px-14 lg:py-16">
+        <div className="mx-auto w-full max-w-sm">
+          <p className="text-[11px] font-semibold tracking-[0.1em] uppercase text-muted-foreground">
+            Acesso
+          </p>
 
-        {isGoogleEnabled() ? (
-          <form className="mt-3" action={googleLogin}>
+          {error ? (
+            <p role="alert" className="mt-4 text-sm font-semibold text-primary-text">
+              Usuário ou senha incorretos.
+            </p>
+          ) : null}
+
+          <form className="mt-6 space-y-6" action={credentialsLogin}>
+            <div>
+              <label
+                htmlFor="username"
+                className="block text-[11px] font-semibold tracking-[0.1em] uppercase"
+              >
+                Usuário
+              </label>
+              <input
+                id="username"
+                name="username"
+                required
+                autoComplete="username"
+                className="mt-2 block w-full border-0 border-b-2 border-divider bg-surface px-3 py-3"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-[11px] font-semibold tracking-[0.1em] uppercase"
+              >
+                Senha
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                className="mt-2 block w-full border-0 border-b-2 border-divider bg-surface px-3 py-3"
+              />
+            </div>
             <button
               type="submit"
-              className="w-full rounded-lg border border-border px-4 py-2.5 font-medium outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+              className="min-h-12 w-full bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              Entrar com Google
+              Entrar
             </button>
           </form>
-        ) : null}
-      </div>
+
+          {isGoogleEnabled() ? (
+            <form className="mt-3" action={googleLogin}>
+              <button
+                type="submit"
+                className="min-h-12 w-full border border-divider px-4 font-semibold hover:bg-surface"
+              >
+                Entrar com Google
+              </button>
+            </form>
+          ) : null}
+        </div>
+      </section>
     </main>
   );
 }

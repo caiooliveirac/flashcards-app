@@ -22,52 +22,48 @@ export default async function ReviewPage({
     notFound();
   }
 
+  // Chrome mínimo: sem SiteHeader/nav global — a sessão ocupa a tela toda.
   return (
-    <div className="min-h-dvh">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <Link href="/" className="font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring">
-            Flashcards
-          </Link>
-          <Link
-            href={`/decks/${queue.deckId}`}
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {queue.deckName}
-          </Link>
-        </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        {queue.cards.length === 0 ? (
-          <div className="mx-auto max-w-lg rounded-xl border border-dashed border-border p-10 text-center">
-            <h1 className="text-lg font-semibold">Tudo em dia ✨</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+    <div className="mx-auto w-full max-w-[640px]">
+      {queue.cards.length === 0 ? (
+        <div className="flex min-h-dvh flex-col">
+          <header className="px-6 pt-5">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {queue.deckName}
+            </p>
+            <div className="mt-2 h-[3px] bg-track" />
+          </header>
+          <main className="flex flex-1 flex-col justify-center px-6 py-10">
+            <h1 className="text-2xl font-semibold leading-[1.45] text-pretty sm:text-[29px]">
+              Tudo em dia
+            </h1>
+            <p className="mt-3 text-sm text-muted-foreground">
               Nenhum card para revisar em “{queue.deckName}” agora. Adicione
               cards novos ou volte quando houver revisões vencidas.
             </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <Link
-                href={`/decks/${queue.deckId}/new`}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground outline-offset-2 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                Adicionar cards
-              </Link>
-              <Link
-                href="/"
-                className="rounded-lg border border-border px-4 py-2 text-sm outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                Voltar aos baralhos
-              </Link>
-            </div>
+          </main>
+          <div className="px-6 pb-6">
+            <Link
+              href={`/decks/${queue.deckId}/new`}
+              className="flex min-h-14 w-full items-center justify-center bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
+            >
+              Adicionar cards
+            </Link>
+            <Link
+              href="/"
+              className="mt-2 flex min-h-14 w-full items-center justify-center border-2 border-divider px-6 text-[15px] font-semibold transition-colors duration-150 ease-out hover:bg-surface"
+            >
+              Voltar aos baralhos
+            </Link>
           </div>
-        ) : (
-          <ReviewSession
-            deckId={queue.deckId}
-            deckName={queue.deckName}
-            cards={queue.cards as SessionCard[]}
-          />
-        )}
-      </main>
+        </div>
+      ) : (
+        <ReviewSession
+          deckId={queue.deckId}
+          deckName={queue.deckName}
+          cards={queue.cards as SessionCard[]}
+        />
+      )}
     </div>
   );
 }

@@ -16,11 +16,13 @@ interface DeckMenuProps {
 }
 
 const itemClass =
-  "block w-full rounded-md px-3 py-1.5 text-left text-sm outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring";
+  "block w-full px-3 py-2.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-surface";
 
 /**
  * Menu de ações por deck. Disclosure simples (aria-expanded + Escape + clique
  * fora); cada item é um form de server action — funciona por teclado.
+ * Visual "Editorial Cognition": raio zero, painel bg-background com régua
+ * border-divider; foco fica com o outline global de acento.
  */
 export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
   const [open, setOpen] = useState(false);
@@ -61,7 +63,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-border px-2 py-1 text-sm leading-none outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex h-11 w-11 items-center justify-center border border-border text-sm leading-none transition-colors duration-150 ease-out hover:bg-surface"
       >
         <span aria-hidden="true">⋯</span>
       </button>
@@ -69,7 +71,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
       {open ? (
         <div
           id={panelId}
-          className="absolute right-0 z-10 mt-1 w-44 rounded-lg border border-border bg-card p-1 text-card-foreground shadow-sm"
+          className="absolute right-0 z-10 mt-1 w-44 border border-divider bg-background p-1 shadow-lg"
         >
           <Link href={`/decks/${deckId}/edit`} className={itemClass}>
             Editar

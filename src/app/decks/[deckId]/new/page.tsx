@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { NoteEditorScreen } from "@/features/editor/note-editor-screen";
 import { getDeck, type DeckWithSettings } from "@/features/decks/service";
@@ -9,6 +8,8 @@ import { mediaMaxBytes } from "@/lib/storage/types";
 /**
  * Criação contínua de cards (aceite F2#1: 5 cards básicos < 60s sem mouse).
  * Server page valida sessão + ownership do deck; o editor é client.
+ * Layout do redesign: barra superior (← deck + contador) e o grid
+ * editor 1fr + aside 340px vivem no client (NoteEditorScreen).
  */
 export default async function NewNotePage({
   params,
@@ -36,27 +37,15 @@ export default async function NewNotePage({
   const tags = await listTags(userId);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={`/decks/${deckId}`}
-            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            ← {deck.name}
-          </Link>
-          <h1 className="mt-1 text-xl font-semibold">Adicionar cards</h1>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <NoteEditorScreen
-          deckId={deckId}
-          deckName={deck.name}
-          maxBytes={mediaMaxBytes()}
-          tagSuggestions={tags.map((t) => t.name)}
-        />
-      </div>
+    <main className="mx-auto max-w-5xl px-5 py-6">
+      <h1 className="sr-only">Adicionar cards</h1>
+      <NoteEditorScreen
+        deckId={deckId}
+        deckName={deck.name}
+        backHref={`/decks/${deckId}`}
+        maxBytes={mediaMaxBytes()}
+        tagSuggestions={tags.map((t) => t.name)}
+      />
     </main>
   );
 }
