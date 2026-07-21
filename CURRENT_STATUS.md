@@ -17,7 +17,8 @@ intra-sessão** de learning + learn-ahead 20min; **leech** sinalizado (lapses≥
 `study_sessions` persistida + `daily_study_metrics` por job noturno do worker.
 
 - **Fase 2 (Criação) concluída** (2026-07-21): decks, editor (básico/cloze/imagem), derivação de cards com fingerprint e matching §5, mídia com validação real no worker, busca FTS. Em produção em `https://flashcards.mnrs.com.br`.
-- **Fase 3 (Revisão) concluída** (2026-07-21): undo, sibling burial, limites diários por timezone, sessões + métricas, preview de intervalos, learn-ahead, leech. Migration 0007 (`study_sessions` + `daily_study_metrics` + FK) testada em banco limpo. Deploy pendente.
+- **Fase 3 (Revisão) concluída** (2026-07-21): undo, sibling burial, limites diários por timezone, sessões + métricas, preview de intervalos, learn-ahead, leech. Migration 0007 (`study_sessions` + `daily_study_metrics` + FK). EM PRODUÇÃO.
+- **Fase 4 (Aplicação ativa) — MVP em produção** (2026-07-21): painel `/painel` (retenção real jovem/maduro, heatmap+streak, Future Due, meta de retenção); **temperatura real dos decks** na home (§8, composição ponderada com retrievability do ts-fsrs, computada na leitura); **resgate de backlog** (modo da fila: pula novos, mais frágil primeiro). Deferidos: `deck_stats` materializada, frescor de conteúdo, notificações (Resend), dashboard fase-2 — ver `debitos.md` seção Fase 4.
 - **Credencial provisória de produção:** `caio`/`1234` (admin) — trocar pelo `/admin` (débito #8 F1).
 - **Ações externas do dono (não bloqueiam):** Google OAuth (F1); API key Magalu Object Storage → chavear `STORAGE_DRIVER=s3` (débito #1 F2); executar o checklist mobile real (`docs/operations/mobile-checklist.md`).
 

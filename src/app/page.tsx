@@ -4,6 +4,7 @@ import { DeckMenu } from "@/components/decks/deck-menu";
 import { SiteHeader } from "@/components/site-header";
 import { deckActivityByDeck } from "@/features/decks/home-queries";
 import { listDecks, type DeckListItem } from "@/features/decks/service";
+import { deckTemperatures, type DeckTemperature } from "@/features/decks/temperature";
 import { reviewCountsByDeck } from "@/features/review/service";
 import { auth, signOut } from "@/lib/auth";
 
@@ -13,13 +14,25 @@ const BACKLOG_THRESHOLD = 40;
 const TRIAGE_SIZE = 20;
 const SECONDS_PER_REVIEW = 40;
 
+const FROZEN_TEMP: DeckTemperature = { score: 0, tier: "frio", label: "Frio" };
+
 interface HomeDeck {
   deck: DeckListItem;
   dueCount: number;
   newCount: number;
   lastNoteAt: Date | null;
   lastReviewAt: Date | null;
+  temp: DeckTemperature;
 }
+
+/** Cor do rótulo de temperatura por faixa (§8: sempre cor + ícone + rótulo). */
+const TEMP_CLASS: Record<DeckTemperature["tier"], string> = {
+  frio: "text-muted-foreground",
+  morno: "text-foreground",
+  quente: "text-primary-text",
+  "muito-quente": "text-primary-text",
+  critico: "text-primary-text",
+};
 
 function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -71,10 +84,25 @@ function isHibernating(d: HomeDeck, now: Date): boolean {
   );
 }
 
-function calmKicker(d: HomeDeck): string {
-  if (d.dueCount > 0) return "□ Pedindo atenção";
-  if (d.newCount > 0) return `□ Crescendo · ${pluralize(d.newCount, "novo", "novos")}`;
-  return "□ Em dia";
+/** Rótulo do canto do card: temperatura real quando há revisões; senão frescor. */
+function deckKicker(
+  d: HomeDeck,
+  urgent: boolean,
+): { text: string; className: string; title?: string } {
+  if (d.dueCount > 0) {
+    return {
+      text: `${urgent ? "■" : "□"} ${d.temp.label}`,
+      className: TEMP_CLASS[d.temp.tier],
+      title: `Temperatura ${d.temp.score}/100 · ${d.dueCount} a revisar. Quanto mais quente, mais frágil está a memória deste baralho.`,
+    };
+  }
+  if (d.newCount > 0) {
+    return {
+      text: `□ Crescendo · ${pluralize(d.newCount, "novo", "novos")}`,
+      className: "text-muted-foreground",
+    };
+  }
+  return { text: "□ Em dia", className: "text-muted-foreground" };
 }
 
 function metaLine(d: HomeDeck, now: Date): string {
@@ -114,9 +142,14 @@ function DeckCell({
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className={`${KICKER} ${urgent ? "text-primary-text" : "text-muted-foreground"}`}>
-          {urgent ? "■ Aquecendo" : calmKicker(item)}
-        </p>
+        {(() => {
+          const kicker = deckKicker(item, urgent);
+          return (
+            <p className={`${KICKER} ${kicker.className}`} title={kicker.title}>
+              {kicker.text}
+            </p>
+          );
+        })()}
         <DeckMenu deckId={deck.id} deckName={deck.name} status={deck.status} />
       </div>
       <h3
@@ -181,10 +214,11 @@ export default async function HomePage({
     redirect("/login");
   }
   const { error } = await searchParams;
-  const [deckRows, reviewCounts, activity] = await Promise.all([
+  const [deckRows, reviewCounts, activity, temperatures] = await Promise.all([
     listDecks(session.user.id),
     reviewCountsByDeck(session.user.id),
     deckActivityByDeck(session.user.id),
+    deckTemperatures(session.user.id),
   ]);
 
   const now = new Date();
@@ -199,15 +233,23 @@ export default async function HomePage({
       newCount: counts.newCount,
       lastNoteAt: act?.lastNoteAt ?? null,
       lastReviewAt: act?.lastReviewAt ?? null,
+      temp: temperatures.get(deck.id) ?? FROZEN_TEMP,
     };
   });
 
   const hibernating = homeDecks.filter((d) => isHibernating(d, now));
   const active = homeDecks.filter((d) => !isHibernating(d, now));
 
+  // O baralho em destaque é o mais QUENTE (memória mais frágil), não só o de
+  // maior contagem — desempate por dueCount. Só concorre quem tem revisão devida.
   let urgentDeck: HomeDeck | null = null;
   for (const d of active) {
-    if (d.dueCount > 0 && (urgentDeck === null || d.dueCount > urgentDeck.dueCount)) {
+    if (d.dueCount === 0) continue;
+    if (
+      urgentDeck === null ||
+      d.temp.score > urgentDeck.temp.score ||
+      (d.temp.score === urgentDeck.temp.score && d.dueCount > urgentDeck.dueCount)
+    ) {
       urgentDeck = d;
     }
   }
@@ -243,6 +285,8 @@ export default async function HomePage({
 
   const createTargetDeck = urgentDeck ?? gridDecks[0] ?? hibernating[0];
   const createHref = createTargetDeck ? `/decks/${createTargetDeck.deck.id}/new` : "/decks/new";
+  // Com backlog, a revisão entra em modo RESGATE (mais frágeis primeiro, §8).
+  const reviewSuffix = backlog ? "?mode=rescue" : "";
 
   return (
     <div className="min-h-dvh">
@@ -320,10 +364,10 @@ export default async function HomePage({
               <p className="mt-3 text-sm text-muted-foreground sm:text-base">{subline}</p>
               {urgentDeck ? (
                 <Link
-                  href={`/decks/${urgentDeck.deck.id}/review`}
+                  href={`/decks/${urgentDeck.deck.id}/review${reviewSuffix}`}
                   className="mt-6 hidden min-h-11 items-center bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover sm:inline-flex"
                 >
-                  Começar revisão
+                  {backlog ? "Recuperar atrasados" : "Começar revisão"}
                 </Link>
               ) : null}
             </section>
@@ -398,10 +442,10 @@ export default async function HomePage({
           {urgentDeck ? (
             <>
               <Link
-                href={`/decks/${urgentDeck.deck.id}/review`}
+                href={`/decks/${urgentDeck.deck.id}/review${reviewSuffix}`}
                 className="flex min-h-12 flex-1 items-center justify-center bg-primary px-4 font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
               >
-                Revisar — {totalDue}
+                {backlog ? "Recuperar" : "Revisar"} — {totalDue}
               </Link>
               <Link
                 href={createHref}

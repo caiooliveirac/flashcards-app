@@ -264,7 +264,7 @@ function liveCardJoin(tx: Tx, userId: string, deckId?: string) {
 
 export async function getReviewQueue(
   userId: string,
-  input: { deckId: string },
+  input: { deckId: string; mode?: "normal" | "rescue" },
   runUser: UserRunner = withUserTransaction,
 ): Promise<ReviewQueue> {
   return runUser(userId, async (tx) => {
@@ -299,14 +299,47 @@ export async function getReviewQueue(
       (r) =>
         !r.suspendedAt && (!r.buriedUntil || r.buriedUntil <= now),
     );
+
+    // Retrievability atual do card (curva de potência FSRS-6) — usado no resgate.
+    const rescue = input.mode === "rescue";
+    const retrievabilityOf = (r: (typeof rows)[number]): number =>
+      scheduler.fsrs.get_retrievability(
+        toFsrsCard(
+          {
+            dueAt: r.dueAt,
+            stability: r.stability ?? 0,
+            difficulty: r.difficulty ?? 0,
+            elapsedDays: r.elapsedDays ?? 0,
+            scheduledDays: r.scheduledDays ?? 0,
+            reps: r.reps ?? 0,
+            lapses: r.lapses ?? 0,
+            learningStep: r.learningStep ?? 0,
+            state: r.state ?? "review",
+            lastReviewedAt: r.lastReviewedAt,
+          },
+          now,
+        ),
+        now,
+        false,
+      );
+
     // Limite diário (§7.4) manda; o cap de sessão é um teto secundário.
-    const due = usable
-      .filter((r) => r.state && r.state !== "new" && r.dueAt && r.dueAt <= now)
-      .sort((a, b) => (a.dueAt as Date).getTime() - (b.dueAt as Date).getTime())
-      .slice(0, Math.min(MAX_DUE_PER_SESSION, reviewRemaining));
-    const fresh = usable
-      .filter((r) => !r.state || r.state === "new")
-      .slice(0, Math.min(NEW_CARDS_PER_SESSION, newRemaining));
+    // Resgate de backlog (§8): prioriza risco (retrievability ascendente, mais
+    // frágil primeiro) e SUSPENDE a introdução de novos; senão, vencido há mais
+    // tempo primeiro.
+    const dueFiltered = usable.filter(
+      (r) => r.state && r.state !== "new" && r.dueAt && r.dueAt <= now,
+    );
+    const due = (
+      rescue
+        ? dueFiltered.sort((a, b) => retrievabilityOf(a) - retrievabilityOf(b))
+        : dueFiltered.sort((a, b) => (a.dueAt as Date).getTime() - (b.dueAt as Date).getTime())
+    ).slice(0, Math.min(MAX_DUE_PER_SESSION, reviewRemaining));
+    const fresh = rescue
+      ? []
+      : usable
+          .filter((r) => !r.state || r.state === "new")
+          .slice(0, Math.min(NEW_CARDS_PER_SESSION, newRemaining));
 
     const toCard = (r: (typeof rows)[number], isNew: boolean): ReviewQueueCard => {
       const before = toFsrsCard(

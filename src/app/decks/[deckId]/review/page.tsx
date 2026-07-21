@@ -6,18 +6,22 @@ import { auth } from "@/lib/auth";
 
 export default async function ReviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ deckId: string }>;
+  searchParams: Promise<{ mode?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/login");
   }
   const { deckId } = await params;
+  const { mode: modeParam } = await searchParams;
+  const mode = modeParam === "rescue" ? "rescue" : "normal";
 
   let queue;
   try {
-    queue = await getReviewQueue(session.user.id, { deckId });
+    queue = await getReviewQueue(session.user.id, { deckId, mode });
   } catch {
     notFound();
   }
