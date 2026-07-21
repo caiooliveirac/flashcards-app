@@ -1,8 +1,15 @@
 # Current Status
 
-- **Fase atual:** 1 (Fundação) — implementada em 2026-07-21, aguardando OAuth client para aceite final de login real.
+- **Fase atual:** 1 (Fundação) — implementada e **em produção** em `https://flashcards.mnrs.com.br` (2026-07-21); aguardando OAuth client para o login real.
 - **Próxima fase:** 2 (Criação — decks, editor, cloze visual, mídia).
-- **Bloqueio externo:** criar Google OAuth client no GCP Console (redirect `http://localhost:3060/api/auth/callback/google` + produção) e preencher `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` no `.env.local`.
+- **Bloqueio externo:** criar Google OAuth client no GCP Console com redirects `https://flashcards.mnrs.com.br/api/auth/callback/google` (prod) e `http://localhost:3060/api/auth/callback/google` (dev); depois atualizar os secrets `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` no repo (`gh secret set`) + `.env.local` e redisparar o deploy.
+
+## Produção (antecipado da Fase 7 em forma mínima)
+
+- Deploy contínuo: push em `main` → workflow `Deploy` (appleboy/ssh-action) → clone/reset no servidor → `.env` → `pnpm install` → **`pnpm db:migrate` como owner** → build standalone → `pm2 startOrReload flashcards-web` (porta 3060) → health local + público.
+- Nginx: entrada `flashcards.mnrs.com.br → 3060` no map de `mnrs.conf` (backup em `~/nginx-backups/`); cert de origem Cloudflare já cobria o wildcard.
+- Banco: roles `flashcards_{owner,app,service,backup}` criados no cluster 16 via `setup-database.sql`; senhas nos secrets do GitHub; credencial de backup só no servidor (`~/.flashcards-backup-credential`, 600).
+- Pendências da Fase 7 completa: worker PM2, backups próprios com restore testado, observabilidade, hardening de headers, rate limits.
 
 ## O que está funcionando
 
