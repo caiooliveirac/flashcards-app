@@ -26,6 +26,7 @@ export const MAX_DUE_PER_SESSION = 100;
 
 export interface ReviewQueueCard {
   cardId: string;
+  noteId: string;
   noteType: "basic" | "cloze";
   clozeGroupKey: string | null;
   content: NoteContent;
@@ -42,11 +43,53 @@ export interface ReviewQueue {
 
 const FSRS_VERSION = "ts-fsrs-5/FSRS-6";
 
+/**
+ * Distribui os cards de forma que nenhum par consecutivo compartilhe o mesmo
+ * noteId. Usa uma fila de prioridade simples (round-robin por nota):
+ * pega sempre o card cuja nota não foi usada no slot anterior, priorizando
+ * a nota com mais cards restantes. Quando é impossível evitar (ex.: só cards
+ * de uma nota), aceita o empate em vez de travar.
+ */
+function spreadSameNote(input: ReviewQueueCard[]): ReviewQueueCard[] {
+  if (input.length <= 1) return input;
+
+  // Agrupa por noteId mantendo a ordem original dentro de cada grupo.
+  const byNote = new Map<string, ReviewQueueCard[]>();
+  for (const card of input) {
+    const bucket = byNote.get(card.noteId);
+    if (bucket) bucket.push(card);
+    else byNote.set(card.noteId, [card]);
+  }
+
+  const buckets = [...byNote.values()];
+  const result: ReviewQueueCard[] = [];
+  let lastNoteId: string | null = null;
+
+  while (result.length < input.length) {
+    // Candidatos: buckets não-vazios cuja nota difere da última usada (se possível).
+    const eligible = buckets
+      .filter((b) => b.length > 0 && b[0]!.noteId !== lastNoteId)
+      .sort((a, b) => b.length - a.length); // maior bucket primeiro
+
+    const chosen =
+      eligible[0] ??
+      // Impossível evitar colisão (todos os restantes são da mesma nota).
+      buckets.find((b) => b.length > 0);
+
+    const card = chosen!.shift()!;
+    result.push(card);
+    lastNoteId = card.noteId;
+  }
+
+  return result;
+}
+
 /** Predicados compartilhados: card ativo de nota viva do deck vivo do usuário. */
 function liveCardJoin(tx: Tx, userId: string, deckId?: string) {
   return tx
     .select({
       cardId: cards.id,
+      noteId: notes.id,
       noteType: notes.noteType,
       clozeGroupKey: cards.clozeGroupKey,
       contentJson: notes.contentJson,
@@ -109,18 +152,22 @@ export async function getReviewQueue(
 
     const toCard = (r: (typeof rows)[number], isNew: boolean): ReviewQueueCard => ({
       cardId: r.cardId,
+      noteId: r.noteId,
       noteType: r.noteType,
       clozeGroupKey: r.clozeGroupKey,
       content: r.contentJson as NoteContent,
       isNew,
     });
 
+    const dueCards = due.map((r) => toCard(r, false));
+    const freshCards = fresh.map((r) => toCard(r, true));
+
     return {
       deckId: deck.id,
       deckName: deck.name,
       dueCount: due.length,
       newCount: fresh.length,
-      cards: [...due.map((r) => toCard(r, false)), ...fresh.map((r) => toCard(r, true))],
+      cards: [...spreadSameNote(dueCards), ...spreadSameNote(freshCards)],
     };
   });
 }

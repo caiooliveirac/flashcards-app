@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import katex from "katex";
 import type {
   Block,
   ClozeInline,
@@ -81,9 +82,13 @@ function renderInlines(
     if (inline.type === "text") return renderTextInline(inline, i);
     if (inline.type === "cloze") return renderCloze(inline, i, opts);
     return (
-      <code key={i} className="note-math">
-        {inline.latex}
-      </code>
+      <span
+        key={i}
+        className="note-math"
+        dangerouslySetInnerHTML={{
+          __html: katex.renderToString(inline.latex, { throwOnError: false }),
+        }}
+      />
     );
   });
 }
@@ -125,11 +130,17 @@ function renderBlock(
         />
       );
     case "formula":
-      // KaTeX é débito da F2: latex literal.
       return (
-        <p key={key} className="note-formula">
-          <code>{block.latex}</code>
-        </p>
+        <p
+          key={key}
+          className="note-formula"
+          dangerouslySetInnerHTML={{
+            __html: katex.renderToString(block.latex, {
+              throwOnError: false,
+              displayMode: true,
+            }),
+          }}
+        />
       );
     case "callout":
       return (
