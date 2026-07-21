@@ -1,4 +1,9 @@
-# Call-sites autorizados de withServiceTransaction (arquitetura §6.1).
+# Arquivos autorizados a tocar o role flashcards_service (BYPASSRLS) — seja
+# via withServiceTransaction, seja via dbService direto (arquitetura §6.1).
 # O CI falha se `grep` em src/ encontrar uso fora desta lista.
-# Adicionar linha = decisão de segurança; revisar o porquê no PR.
+# Adicionar linha = decisão de segurança; justificar no PR.
+src/app/api/health/route.ts
+src/features/admin/service.ts
 src/lib/auth/bootstrap.ts
+src/lib/auth/index.ts
+src/lib/auth/require-admin.ts

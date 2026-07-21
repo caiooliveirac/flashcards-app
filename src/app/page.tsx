@@ -13,7 +13,17 @@ export default async function HomePage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <span className="font-semibold">Flashcards</span>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{session.user.email}</span>
+            {session.user.role === "admin" ? (
+              <a
+                href="/admin"
+                className="text-sm text-primary underline-offset-4 hover:underline"
+              >
+                Admin
+              </a>
+            ) : null}
+            <span className="text-sm text-muted-foreground">
+              {session.user.email ?? session.user.name}
+            </span>
             <form
               action={async () => {
                 "use server";

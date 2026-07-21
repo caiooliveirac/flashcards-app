@@ -15,6 +15,13 @@
       "when": 1784612540029,
       "tag": "0001_rls_force_and_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784646059941,
+      "tag": "0002_same_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,10 @@
-import { integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgEnum, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
 // Tabelas Auth.js: SEM RLS (allowlist do invariante) e SEM grants para
 // flashcards_app — somente flashcards_service as acessa, via adapter.
+
+export const userRole = pgEnum("user_role", ["user", "admin"]);
 
 export const users = pgTable("users", {
   id: text("id")
@@ -12,6 +14,10 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   emailVerified: timestamp("email_verified", { mode: "date", withTimezone: true }),
   image: text("image"),
+  // Login convencional (Credentials): null para contas só-OAuth.
+  username: text("username").unique(),
+  passwordHash: text("password_hash"),
+  role: userRole("role").notNull().default("user"),
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .defaultNow(),
