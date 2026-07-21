@@ -35,6 +35,9 @@ export function SiteHeader({
             <Link href="/" className="hover:text-primary-text">
               Baralhos
             </Link>
+            <Link href="/painel" className="hover:text-primary-text">
+              Painel
+            </Link>
             <span
               className="cursor-default text-muted-foreground"
               title="Assistente de criação com IA — em breve"

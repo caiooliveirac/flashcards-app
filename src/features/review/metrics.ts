@@ -7,8 +7,10 @@ import { studyDayKey, type StudyDayConfig } from "@/lib/study-day";
  * Agregação de `daily_study_metrics` a partir de `review_logs` (job noturno,
  * §7.4). Roda como flashcards_service (BYPASSRLS): varre todos os usuários.
  * Regra de consumo (§3.3): ignora logs `origin='undo'` E os logs que eles
- * revertem — métricas não contam revisões retratadas. "Retenção real" = acertos
- * (rating≥3) sobre a PRIMEIRA revisão de cada card no dia de estudo.
+ * revertem — métricas não contam revisões retratadas. "Retenção real" (true
+ * retention, def. do manual do Anki): sobre a PRIMEIRA revisão de cada card no
+ * dia de estudo, Errei(1)=falha e Difícil/Bom/Fácil(≥2)=acerto — portanto
+ * retention_num conta rating≥2 (NÃO ≥3: Difícil ainda é lembrar).
  * Idempotente (upsert por (user, study_day)): rodar de novo recomputa igual.
  */
 
@@ -94,7 +96,7 @@ export async function aggregateDailyMetrics(
     for (const [day, agg] of byDay) {
       const den = agg.firstRatingByCard.size;
       let num = 0;
-      for (const r of agg.firstRatingByCard.values()) if (r >= 3) num += 1;
+      for (const r of agg.firstRatingByCard.values()) if (r >= 2) num += 1;
       await runService((tx) =>
         tx
           .insert(dailyStudyMetrics)
