@@ -1,0 +1,85 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-flashcards
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy em flashcards.mnrs.com.br
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.MAGALU_HOST }}
+          username: ${{ secrets.MAGALU_USER }}
+          key: ${{ secrets.MAGALU_SSH_KEY }}
+          envs: DATABASE_URL_OWNER,DATABASE_URL_APP,DATABASE_URL_SERVICE,AUTH_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,GIT_COMMIT_SHA
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/home/ubuntu/flashcards-app"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              gh repo clone caiooliveirac/flashcards-app "$APP_DIR"
+            fi
+            cd "$APP_DIR"
+            git fetch origin main
+            git reset --hard "$GIT_COMMIT_SHA"
+
+            umask 077
+            cat > .env <<EOF
+            NODE_ENV=production
+            DATABASE_URL_APP=${DATABASE_URL_APP}
+            DATABASE_URL_SERVICE=${DATABASE_URL_SERVICE}
+            DATABASE_POOL_MAX_APP=6
+            DATABASE_POOL_MAX_SERVICE=2
+            AUTH_SECRET=${AUTH_SECRET}
+            AUTH_URL=https://flashcards.mnrs.com.br
+            AUTH_TRUST_HOST=true
+            AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
+            AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+            EOF
+
+            pnpm install --frozen-lockfile
+
+            # Migrations versionadas como flashcards_owner (NUNCA drizzle-kit push).
+            DATABASE_URL_OWNER="${DATABASE_URL_OWNER}" pnpm db:migrate
+
+            pnpm build
+            cp -r .next/static .next/standalone/.next/static
+            cp -r public .next/standalone/public 2>/dev/null || true
+
+            pm2 startOrReload ecosystem.config.cjs --only flashcards-web
+            pm2 save
+
+            sleep 3
+            curl -fsS http://127.0.0.1:3060/api/health
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://flashcards.mnrs.com.br/api/health)
+            if [ "$STATUS" != "200" ]; then
+              echo "healthcheck público falhou: $STATUS"
+              exit 1
+            fi
+        env:
+          DATABASE_URL_OWNER: ${{ secrets.DATABASE_URL_OWNER }}
+          DATABASE_URL_APP: ${{ secrets.DATABASE_URL_APP }}
+          DATABASE_URL_SERVICE: ${{ secrets.DATABASE_URL_SERVICE }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+          GIT_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Deploy flashcards" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
