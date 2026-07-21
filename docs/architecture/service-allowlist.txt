@@ -1,0 +1,4 @@
+# Call-sites autorizados de withServiceTransaction (arquitetura §6.1).
+# O CI falha se `grep` em src/ encontrar uso fora desta lista.
+# Adicionar linha = decisão de segurança; revisar o porquê no PR.
+src/lib/auth/bootstrap.ts
