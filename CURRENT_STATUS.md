@@ -1,8 +1,9 @@
 # Current Status
 
-- **Fase atual:** 1 (Fundação) — implementada e **em produção** em `https://flashcards.mnrs.com.br` (2026-07-21); aguardando OAuth client para o login real.
+- **Fase atual:** 1 (Fundação) — **concluída e em produção** em `https://flashcards.mnrs.com.br` (2026-07-21), com login convencional funcionando (Credentials + JWT) e painel `/admin` auditado. Sem bloqueio externo.
 - **Próxima fase:** 2 (Criação — decks, editor, cloze visual, mídia).
-- **Bloqueio externo:** criar Google OAuth client no GCP Console com redirects `https://flashcards.mnrs.com.br/api/auth/callback/google` (prod) e `http://localhost:3060/api/auth/callback/google` (dev); depois atualizar os secrets `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` no repo (`gh secret set`) + `.env.local` e redisparar o deploy.
+- **Opcional (quando quiser):** Google OAuth — criar client no GCP com redirects `https://flashcards.mnrs.com.br/api/auth/callback/google` (prod) e `http://localhost:3060/api/auth/callback/google` (dev), atualizar secrets `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` e redisparar deploy; o botão Google aparece sozinho quando a credencial existir.
+- **Credencial provisória de produção:** `caio`/`1234` (admin) — trocar pelo próprio `/admin` (débito #8).
 
 ## Produção (antecipado da Fase 7 em forma mínima)
 
