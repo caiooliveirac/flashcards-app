@@ -1,27 +1,39 @@
 # Current Status
 
-- **Fase atual:** 1 (Fundação) — **concluída e em produção** em `https://flashcards.mnrs.com.br` (2026-07-21), com login convencional funcionando (Credentials + JWT) e painel `/admin` auditado. Sem bloqueio externo.
-- **Próxima fase:** 2 (Criação — decks, editor, cloze visual, mídia).
-- **Opcional (quando quiser):** Google OAuth — criar client no GCP com redirects `https://flashcards.mnrs.com.br/api/auth/callback/google` (prod) e `http://localhost:3060/api/auth/callback/google` (dev), atualizar secrets `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` e redisparar deploy; o botão Google aparece sozinho quando a credencial existir.
-- **Credencial provisória de produção:** `caio`/`1234` (admin) — trocar pelo próprio `/admin` (débito #8).
+## MVP demonstrável (2026-07-21) — modo override, plano de 7 fases SUSPENSO
 
-## Produção (antecipado da Fase 7 em forma mínima)
+Fluxo ponta a ponta em produção: login → baralhos com contagens (total,
+a revisar, novos) e temperatura simples → criar/abrir baralho → adicionar
+cards (básico/cloze/imagem, editor da Fase 2) → **sessão de revisão**
+(`/decks/[id]/review`: vencidos→novos, frente→revelar (espaço)→avaliar
+Errei/Difícil/Bom/Fácil (1–4), FSRS-6 real via ts-fsrs + perfil do usuário,
+idempotente, progresso "N de M") → resumo da sessão → home atualizada.
+Fila = snapshot da sessão; sem undo/burial/limites diários — ver `POST_MVP.md`.
+Retomar as fases originais só com nova ordem do dono.
 
-- Deploy contínuo: push em `main` → workflow `Deploy` (appleboy/ssh-action) → clone/reset no servidor → `.env` → `pnpm install` → **`pnpm db:migrate` como owner** → build standalone → `pm2 startOrReload flashcards-web` (porta 3060) → health local + público.
-- Nginx: entrada `flashcards.mnrs.com.br → 3060` no map de `mnrs.conf` (backup em `~/nginx-backups/`); cert de origem Cloudflare já cobria o wildcard.
-- Banco: roles `flashcards_{owner,app,service,backup}` criados no cluster 16 via `setup-database.sql`; senhas nos secrets do GitHub; credencial de backup só no servidor (`~/.flashcards-backup-credential`, 600).
-- Pendências da Fase 7 completa: worker PM2, backups próprios com restore testado, observabilidade, hardening de headers, rate limits.
+- **Fase 2 (Criação) concluída** (2026-07-21): decks, editor (básico/cloze/imagem), derivação de cards com fingerprint e matching §5, mídia com validação real no worker, busca FTS. Em produção em `https://flashcards.mnrs.com.br`.
+- **Fase 3 (Revisão)**: MVP mínimo entregue (fila, submit FSRS idempotente, resumo); escopo completo suspenso.
+- **Credencial provisória de produção:** `caio`/`1234` (admin) — trocar pelo `/admin` (débito #8 F1).
+- **Ações externas do dono (não bloqueiam):** Google OAuth (F1); API key Magalu Object Storage → chavear `STORAGE_DRIVER=s3` (débito #1 F2); executar o checklist mobile real (`docs/operations/mobile-checklist.md`).
 
-## O que está funcionando
+## O que a Fase 2 entregou
 
-- Schema Drizzle completo da Fase 1 (15 tabelas) com **RLS + FORCE RLS + policies** em todas as tabelas privadas; migrations versionadas (`0000` gerada + `0001` custom com grants).
-- Modelo de 4 roles (`owner`/`app`/`service`/`backup`) — `ops/db/setup-database.sql` idempotente.
-- `withUserTransaction` (set_config transaction-local) e `withServiceTransaction` com **allowlist verificada no CI** (`scripts/check-service-allowlist.sh`).
-- Auth.js v5 (Google, database sessions) com adapter no role service; `proxy.ts` (Next 16); bootstrap de usuário novo (profile + preferences + perfil FSRS-6 com 21 parâmetros do ts-fsrs).
-- 21 testes verdes: 6 suites de integração contra Postgres real (isolamento A/B, default-deny, append-only, invariante de RLS via pg_class, vazamento de contexto no pool, bootstrap) + unit do `.env.example`.
-- CI GitHub Actions (postgres:16): lint → typecheck → allowlist → unit → integração → build.
-- Dev server verificado no browser: `/` redireciona para `/login`, página renderiza sem erros de console.
+- **Decks:** CRUD completo com status/posição/settings 1:1, soft delete, server actions + UI (home = listagem).
+- **Formato `NoteContentV1`** (Zod, discriminated union basic/cloze, nested cloze rejeitado por construção) + parser/serializer ProseMirror↔JSON com property-based tests + renderizador React server-safe (classes `.cloze-*`/`.note-*` prontas para a tela de revisão da F3).
+- **Cloze §5 literal:** derivação por groupKey (1 card por grupo), fingerprint sha256 canônico (contrato de hash — débito #11), matching em passadas key→resgate por fingerprint→reativação (só com conteúdo idêntico, endurecido pela revisão adversarial)→create/remove; variant monotônico nunca reutilizado; editor nunca recicla keys históricas (inclusive de cards removed).
+- **Editor Tiptap 3.28:** 3 modos com tabs (Ctrl+1/2/3), Ctrl+Enter salva, Tab frente→verso, Ctrl+Shift+C oculta (novo grupo/mesmo grupo), preview ao vivo dos N cards, fluxo contínuo (salvar→toast desfazer→limpar→foco), tags com chips, upload por paste/drag/input file (mobile), toolbar touch-safe.
+- **Mídia (§10):** `lib/storage` com driver **local ativo** (sem API key Magalu — débito #1) e driver s3 pronto (pin @aws-sdk 3.677.0); pipeline staging→confirm→worker valida DE VERDADE (HEAD, magic bytes, sha256, dimensões, thumbnail webp)→grava final DO BUFFER VALIDADO (TOCTOU morto)→ready; PUT fecha após confirm (`confirmed_at`); GC mark-and-sweep (`orphan_seen_at`, carência conta da orfandade observada) com recheck pós-lock (race GC×save provada e fechada); rate limit 30 uploads/h; serving autenticado com RLS.
+- **Worker PM2** (`flashcards-worker`, pg-boss 12 no schema `pgboss` por migration, `migrate:false`, pools 2/2+5): validação de mídia + GC horário; build esbuild (`dist/worker.js`), env via `--env-file`.
+- **Busca FTS** portuguesa com índice GIN usado sob RLS — exigiu `ALTER FUNCTION ts_match_vq/to_tsvector LEAKPROOF` (aplicado em prod; em `ops/db/setup-database.sql`).
+- **Migrations 0003–0006** (media_references + FORCE RLS/grants + pgboss + colunas de GC/confirm) — testadas em banco limpo E sobre dump da produção.
 
-## Decisões/débitos
+## Qualidade
 
-- Ver `docs/architecture/fase-0-*.md` (decisões D1–D22, riscos R1–R15) e `docs/architecture/debitos.md`.
+- **Testes:** ~135 unit (property-based em derivação/matching/parser) + ~90 integração (RLS/vazamento, preservação de progresso, worker real, GC, EXPLAIN do GIN) + **E2E Playwright 8 specs verdes** (F2#1: 5 cards só teclado em 486ms; cloze 2 grupos; paste real de imagem; mobile file input; axe sem violações críticas — contraste AA corrigido no token `--primary`; isolamento entre contas).
+- **Revisão adversarial multi-agente:** 4 lentes → 16 achados → 14 confirmados por verificação independente (2 provados com psql concorrente) → todos corrigidos com testes de regressão (GC race, TOCTOU local, reativação por key reciclada, retry destrutivo do validate, thumbnail fora do try/catch, nginx `client_max_body_size`, orçamento de conexões do worker).
+- Aceites F2#1–#7 cobertos (F2#4 parcial: caminho mobile E2E verde; checklist em devices reais pendente do dono).
+
+## Produção
+
+- Deploy contínuo com worker: build esbuild + `pm2 startOrReload` (web+worker) + healthcheck de ambos; mídia local em `/home/ubuntu/flashcards-data/media` (fora do repo); nginx dedicado `ops/nginx/flashcards.conf` (12m upload) aplicado.
+- Débitos vivos: ver `docs/architecture/debitos.md` (F1 #1–10, F2 #1–16).

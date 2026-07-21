@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Invariante de segurança: o role de serviço (BYPASSRLS) só pode ser usado nos
-# arquivos da allowlist — cobre withServiceTransaction E dbService direto.
-# Definições em src/db/{client,runtime}.ts são isentas. Bloqueador de CI.
+# arquivos da allowlist — cobre withServiceTransaction, dbService direto e o
+# serviceRawPool (pg-boss send-only). Definições em src/db/{client,runtime}.ts
+# são isentas. Bloqueador de CI.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-actual=$(grep -rlE "withServiceTransaction|dbService" src \
+actual=$(grep -rlE "withServiceTransaction|dbService|serviceRawPool" src \
   --include='*.ts' --include='*.tsx' 2>/dev/null |
   grep -v '^src/db/client\.ts$' |
   grep -v '^src/db/runtime\.ts$' |

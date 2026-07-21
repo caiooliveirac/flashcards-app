@@ -11,6 +11,12 @@ export interface DbClients {
   dbApp: Db;
   /** Pool do role flashcards_service — BYPASSRLS restrito; use via withServiceTransaction. */
   dbService: Db;
+  /**
+   * Pool pg cru do service — EXCLUSIVO para a instância pg-boss send-only da
+   * web (opção `db` do construtor, §6.1: reusa conexões em vez de abrir pool
+   * novo). Nunca usar para queries de domínio.
+   */
+  serviceRawPool: Pool;
   withUserTransaction: <T>(userId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>;
   withServiceTransaction: <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>;
   end: () => Promise<void>;
@@ -58,6 +64,7 @@ export function createDbClients(config: DbConfig): DbClients {
   return {
     dbApp,
     dbService,
+    serviceRawPool: servicePool,
     withUserTransaction,
     withServiceTransaction,
     end: async () => {

@@ -7,3 +7,6 @@ src/features/admin/service.ts
 src/lib/auth/bootstrap.ts
 src/lib/auth/index.ts
 src/lib/auth/require-admin.ts
+src/lib/jobs/boss.ts
+src/workers/handlers/media-gc.ts
+src/workers/handlers/media-validate.ts

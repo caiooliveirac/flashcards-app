@@ -128,11 +128,40 @@ export const mediaAssets = pgTable(
     sha256: text("sha256"),
     status: mediaStatus("status").notNull().default("pending"),
     thumbnailKey: text("thumbnail_key"),
+    // Fecha o PUT de upload após o confirm (TOCTOU do driver local).
+    confirmedAt: timestamp("confirmed_at", { mode: "date", withTimezone: true }),
+    // GC mark-and-sweep: carência conta a partir da orfandade OBSERVADA,
+    // não do created_at (imagem removida de nota não pode morrer em 1h).
+    orphanSeenAt: timestamp("orphan_seen_at", { mode: "date", withTimezone: true }),
     createdAt: createdAt(),
     deletedAt: timestamp("deleted_at", { mode: "date", withTimezone: true }),
   },
   (t) => [
     index("media_assets_owner_created_idx").on(t.ownerUserId, t.createdAt),
     ownerPolicy("media_assets_owner", t.ownerUserId),
+  ],
+);
+
+export const mediaReferences = pgTable(
+  "media_references",
+  {
+    mediaAssetId: uuid("media_asset_id")
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: "cascade" }),
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    // Posição do uso dentro da nota (ex.: "front:0", "back:2", "text:1").
+    slot: text("slot").notNull(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    altText: text("alt_text"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.mediaAssetId, t.noteId, t.slot] }),
+    index("media_references_note_idx").on(t.noteId),
+    ownerPolicy("media_references_owner", t.ownerUserId),
   ],
 );

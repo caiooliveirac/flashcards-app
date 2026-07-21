@@ -47,7 +47,13 @@ jobs:
             AUTH_TRUST_HOST=true
             AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
             AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+            STORAGE_DRIVER=local
+            STORAGE_LOCAL_DIR=/home/ubuntu/flashcards-data/media
+            MEDIA_MAX_BYTES=10485760
             EOF
+
+            # Mídia fora do diretório do repo (git reset/clean nunca a alcança).
+            mkdir -p /home/ubuntu/flashcards-data/media
 
             pnpm install --frozen-lockfile
 
@@ -58,7 +64,10 @@ jobs:
             cp -r .next/static .next/standalone/.next/static
             cp -r public .next/standalone/public 2>/dev/null || true
 
-            pm2 startOrReload ecosystem.config.cjs --only flashcards-web
+            # Worker empacotado por esbuild (D22); deps nativas vêm do node_modules.
+            node scripts/build-worker.mjs
+
+            pm2 startOrReload ecosystem.config.cjs
             pm2 save
 
             sleep 3
@@ -66,6 +75,11 @@ jobs:
             STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://flashcards.mnrs.com.br/api/health)
             if [ "$STATUS" != "200" ]; then
               echo "healthcheck público falhou: $STATUS"
+              exit 1
+            fi
+            WORKER_STATUS=$(pm2 jlist | node -e "const a=JSON.parse(require('fs').readFileSync(0,'utf8'));const w=a.find(p=>p.name==='flashcards-worker');console.log(w?w.pm2_env.status:'missing')")
+            if [ "$WORKER_STATUS" != "online" ]; then
+              echo "worker não está online: $WORKER_STATUS"
               exit 1
             fi
         env:

@@ -19,3 +19,9 @@ test-results/
 # misc
 .DS_Store
 *.tsbuildinfo
+
+# artefatos de build
+dist/
+
+# midia local (driver local de storage)
+.data/

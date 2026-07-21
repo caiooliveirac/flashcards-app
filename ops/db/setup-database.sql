@@ -38,3 +38,12 @@ GRANT CONNECT ON DATABASE flashcards TO flashcards_app, flashcards_service, flas
 
 -- Grants em tabelas ficam nas migrations (0001_rls_force_and_grants.sql),
 -- aplicadas pelo flashcards_owner via `pnpm db:migrate`.
+
+-- FTS sob RLS (Fase 2, aceite F2#7): sem LEAKPROOF nestas funções, o planner
+-- nunca usa o índice GIN de notes.search_text abaixo do qual de policy
+-- (restriction_is_securely_promotable). Nenhuma das duas vaza valores de linha
+-- em erros — workaround canônico para FTS+RLS. Requer superusuário; por
+-- database (rodar conectado à base flashcards).
+\connect flashcards
+ALTER FUNCTION pg_catalog.ts_match_vq(tsvector, tsquery) LEAKPROOF;
+ALTER FUNCTION pg_catalog.to_tsvector(regconfig, text) LEAKPROOF;
