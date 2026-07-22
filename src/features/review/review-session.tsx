@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NoteContent } from "@/lib/content";
 import { LiveCount } from "@/lib/motion/components";
 import { emitMotion } from "@/lib/motion/events";
 import { renderBlocks, renderNoteContent } from "@/lib/render";
@@ -13,19 +12,17 @@ import {
   suspendCardAction,
   undoReviewAction,
 } from "./actions";
+import {
+  advanceQueue,
+  dropNote,
+  initialQueue,
+  remainingCount,
+  shouldRequeue,
+  undoQueue,
+} from "./session-queue";
+import type { SessionCard } from "./session-types";
 
-export interface SessionCard {
-  cardId: string;
-  noteId: string;
-  noteType: "basic" | "cloze";
-  clozeGroupKey: string | null;
-  content: NoteContent;
-  isNew: boolean;
-  /** ms até vencer para [Errei, Difícil, Bom, Fácil]. */
-  previewMs: [number, number, number, number];
-  lapses: number;
-  isLeech: boolean;
-}
+export type { SessionCard } from "./session-types";
 
 const RATINGS = [
   { value: 1, label: "Errei", key: "1", magnetism: 8 },
@@ -35,16 +32,8 @@ const RATINGS = [
 ] as const;
 
 const KICKER = "text-[11px] font-semibold uppercase tracking-[0.08em]";
-// Learn-ahead (Anki): quando a fila principal esvazia, cards de learning que
-// vencem dentro desta janela são antecipados em vez de encerrar a sessão.
-const LEARN_AHEAD_MS = 20 * 60_000;
 // Mesma triagem da home: a partir daqui a sessão conta como resgate de backlog.
 const TRIAGE_SIZE = 20;
-
-interface LearnItem {
-  card: SessionCard;
-  readyAt: number;
-}
 
 function mediaUrl(assetId: string, thumb?: boolean): string {
   return `/api/media/${assetId}${thumb ? "?thumb=1" : ""}`;
@@ -133,10 +122,10 @@ export function ReviewSession({
   cards: SessionCard[];
   studySessionId?: string;
 }) {
-  // Fila principal (não respondidos) + fila de learning (reentrada §7.2).
-  const [mainQueue, setMainQueue] = useState<SessionCard[]>(() => cards.slice(1));
-  const [learnQueue, setLearnQueue] = useState<LearnItem[]>([]);
-  const [current, setCurrent] = useState<SessionCard | null>(cards[0] ?? null);
+  // Fila única com transição pura (session-queue.ts). Antes eram três estados
+  // atualizados em updaters aninhados, o que tornava a transição imprevisível.
+  const [queue, setQueue] = useState(() => initialQueue(cards));
+  const { current } = queue;
 
   const [revealed, setRevealed] = useState(false);
   const [pending, setPending] = useState(false);
@@ -165,37 +154,28 @@ export function ReviewSession({
   const done = current === null;
 
   // Nova apresentação → key idempotente nova + cronômetro (só refs, sem render).
+  // A dependência é `presentation`, não `current`: reapresentar o MESMO objeto
+  // de card não mudava a identidade do estado, a key ficava velha e o servidor
+  // descartava a avaliação como duplicata — o card nunca progredia.
   useEffect(() => {
     if (!current) return;
     keyRef.current = crypto.randomUUID();
     shownAtRef.current = Date.now();
-  }, [current]);
+  }, [queue.presentation, current]);
 
-  /** Puxa o próximo card: fila principal primeiro; senão learn-ahead. */
-  const advance = useCallback(() => {
-    setRevealed(false);
-    setMenuOpen(false);
-    setMainQueue((main) => {
-      if (main.length > 0) {
-        setCurrent(main[0]!);
-        return main.slice(1);
-      }
-      // Fila principal vazia: antecipa o learning mais próximo (learn-ahead).
-      setLearnQueue((learn) => {
-        if (learn.length === 0) {
-          setCurrent(null);
-          return learn;
-        }
-        let soonestIdx = 0;
-        for (let i = 1; i < learn.length; i++) {
-          if (learn[i]!.readyAt < learn[soonestIdx]!.readyAt) soonestIdx = i;
-        }
-        setCurrent(learn[soonestIdx]!.card);
-        return learn.filter((_, i) => i !== soonestIdx);
-      });
-      return main;
-    });
-  }, []);
+  /**
+   * Próxima apresentação. `requeue` devolve o card avaliado ao learn-ahead e
+   * `burySiblingsOfNote` tira os irmãos da nota da sessão — o servidor já os
+   * enterra, mas a fila do cliente é um snapshot do carregamento da página.
+   */
+  const advance = useCallback(
+    (options: Parameters<typeof advanceQueue>[1] = {}) => {
+      setRevealed(false);
+      setMenuOpen(false);
+      setQueue((q) => advanceQueue(q, options));
+    },
+    [],
+  );
 
   /** Revela a resposta e anuncia a coreografia (flip + obturador). */
   const reveal = useCallback(() => {
@@ -231,17 +211,20 @@ export function ReviewSession({
       lastActionRef.current = { card, rating, durationMs };
       setCanUndo(true);
 
-      // Reentrada intra-sessão: card ainda em learning e vencendo dentro da
-      // janela volta à fila; senão saiu da sessão (agendado p/ outro dia).
-      const dueInMs = new Date(result.dueAt).getTime() - Date.now();
-      if (
-        (result.state === "learning" || result.state === "relearning") &&
-        dueInMs <= LEARN_AHEAD_MS
-      ) {
-        setLearnQueue((learn) => [...learn, { card, readyAt: Date.now() + Math.max(0, dueInMs) }]);
-      }
+      // Reentrada intra-sessão: card em learning vencendo dentro da janela
+      // volta à fila — mas só reaparece quando o horário chegar de fato.
+      const now = Date.now();
+      const dueInMs = new Date(result.dueAt).getTime() - now;
       setPending(false);
-      advance();
+      advance({
+        ...(shouldRequeue(result.state, result.dueAt, now)
+          ? { requeue: { card, readyAt: now + Math.max(0, dueInMs) } }
+          : {}),
+        // Espelha o sibling burial que o servidor acabou de aplicar.
+        burySiblingsOfNote: card.noteId,
+        exclude: card.cardId,
+        now,
+      });
     },
     [current, pending, advance, studySessionId],
   );
@@ -261,16 +244,14 @@ export function ReviewSession({
     setTally((t) => ({ ...t, [last.rating]: Math.max(0, (t[last.rating] ?? 0) - 1) }));
     setReviewedCount((n) => Math.max(0, n - 1));
     setElapsedMs((ms) => Math.max(0, ms - last.durationMs));
-    // Remove qualquer reentrada pendente do mesmo card (evita duplicar).
-    setLearnQueue((learn) => learn.filter((l) => l.card.cardId !== last.card.cardId));
-    if (current) setMainQueue((main) => [current, ...main]);
     setRevealed(false);
     setMenuOpen(false);
-    setCurrent(last.card);
+    setQueue((q) => undoQueue(q, last.card));
     lastActionRef.current = null;
     setCanUndo(false);
     setPending(false);
-  }, [pending, current]);
+    // `current` não é mais dependência: undoQueue devolve o card da tela à fila.
+  }, [pending]);
 
   const manage = useCallback(
     async (kind: "suspend" | "bury", includeSiblings?: boolean) => {
@@ -290,10 +271,7 @@ export function ReviewSession({
       // Card sai da sessão; enterrar irmãos também os remove das filas.
       lastActionRef.current = null;
       setCanUndo(false);
-      if (includeSiblings) {
-        setMainQueue((main) => main.filter((c) => c.noteId !== card.noteId));
-        setLearnQueue((learn) => learn.filter((l) => l.card.noteId !== card.noteId));
-      }
+      if (includeSiblings) setQueue((q) => dropNote(q, card.noteId));
       setPending(false);
       advance();
     },
@@ -414,7 +392,7 @@ export function ReviewSession({
   }
 
   const card = current;
-  const remaining = mainQueue.length + learnQueue.length + 1; // +1 = card atual
+  const remaining = remainingCount(queue);
   const renderOpts = {
     mediaUrl,
     cloze:
