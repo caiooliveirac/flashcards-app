@@ -57,13 +57,14 @@ export function TagInput({ tags, onChange, suggestions }: TagInputProps) {
         {tags.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 bg-track px-2 py-0.5 text-sm"
+            className="ms-stamp inline-flex items-center gap-1 bg-track px-2 py-0.5 text-sm"
           >
             {tag}
             <button
               type="button"
               aria-label={`Remover tag ${tag}`}
               onClick={() => onChange(tags.filter((t) => t !== tag))}
+              data-ms-ripple="danger"
               className="text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
             >
               ×

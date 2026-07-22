@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { emitMotion } from "@/lib/motion/events";
+import { PreceptorGlyph, type GlyphState } from "@/lib/motion/preceptor-glyph";
 
 /**
  * Painel do assistente (tira-dúvidas). Botão flutuante → chat com streaming SSE.
@@ -201,7 +203,7 @@ export function AssistantPanel() {
 
   /** Confirma e cria o card proposto no baralho escolhido (§9.2). */
   const createCard = useCallback(
-    async (idx: number) => {
+    async (idx: number, sourceEl?: Element | null) => {
       const msg = messages[idx];
       if (!msg?.draft) return;
       const deckId = msg.draftDeckId ?? decks?.[0]?.id;
@@ -225,6 +227,11 @@ export function AssistantPanel() {
           | null;
         if (res.ok) {
           const n = data?.cardCount ?? 1;
+          // Trail de energia: o card viaja do chat até o baralho (4g).
+          emitMotion("card:accepted", {
+            sourceEl,
+            deckEl: document.querySelector("[data-ms-trail-target]"),
+          });
           updateAt(idx, (m) => ({
             ...m,
             draftStatus: "created",
@@ -249,6 +256,18 @@ export function AssistantPanel() {
   );
 
   const lastMsg = messages[messages.length - 1];
+
+  // Estado do corpo da IA derivado do que ela está de fato fazendo (4f):
+  // sem resposta ainda = raciocinando; texto escorrendo = executa; parada com
+  // conversa aberta = observando; painel vazio = repouso.
+  const glyphState: GlyphState = busy
+    ? lastMsg?.content
+      ? "executa"
+      : "raciocinando"
+    : messages.length > 0
+      ? "observando"
+      : "repouso";
+
   const canDeepen =
     !busy &&
     lastMsg?.role === "assistant" &&
@@ -261,9 +280,12 @@ export function AssistantPanel() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Abrir assistente de dúvidas"
+        data-ms-magnetic="6"
+        data-ms-ripple="ink"
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-amber-800 text-white shadow-lg transition hover:bg-amber-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
       >
-        <ChatIcon />
+        {/* O ✳ nunca fica parado: em repouso ele respira, e reage aos eventos. */}
+        <PreceptorGlyph listen className="text-white" />
       </button>
     );
   }
@@ -271,19 +293,25 @@ export function AssistantPanel() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex h-[min(70vh,560px)] w-[min(92vw,384px)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl">
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-stone-900">Preceptor</p>
-          <p className="text-xs text-stone-500">Tira-dúvidas de residência</p>
+        <div className="flex items-center gap-2.5">
+          <PreceptorGlyph state={glyphState} />
+          <div>
+            <p className="text-sm font-semibold text-stone-900">Preceptor</p>
+            <p className="text-xs text-stone-500">Tira-dúvidas de residência</p>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Fechar assistente"
+          data-ms-ripple="ink"
           className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
         >
           <CloseIcon />
         </button>
       </header>
+
+      {busy ? <div className="ms-tick h-[2px] bg-track" aria-hidden="true" /> : null}
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
@@ -372,8 +400,10 @@ export function AssistantPanel() {
                       </select>
                       <button
                         type="button"
-                        onClick={() => createCard(i)}
+                        onClick={(e) => createCard(i, e.currentTarget)}
                         disabled={m.draftStatus === "creating" || !decks?.length}
+                        data-ms-magnetic
+                        data-ms-ripple="create"
                         className="shrink-0 rounded bg-amber-800 px-2 py-1 font-medium text-white transition hover:bg-amber-900 disabled:opacity-40"
                       >
                         {m.draftStatus === "creating" ? "Criando…" : "Criar card"}
@@ -401,6 +431,8 @@ export function AssistantPanel() {
           <button
             type="button"
             onClick={deepen}
+            data-ms-magnetic
+            data-ms-ripple="accent"
             className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900 transition hover:bg-amber-100"
           >
             <SparkIcon /> Aprofundar
@@ -428,20 +460,14 @@ export function AssistantPanel() {
           onClick={send}
           disabled={busy || !input.trim()}
           aria-label="Enviar"
+          data-ms-magnetic
+          data-ms-ripple="ink"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-800 text-white transition hover:bg-amber-900 disabled:opacity-40"
         >
           <SendIcon />
         </button>
       </div>
     </div>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
   );
 }
 

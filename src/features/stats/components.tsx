@@ -134,7 +134,7 @@ export function ActivitySection({
 
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
         <p className="flex items-baseline gap-2">
-          <span className="text-4xl font-extrabold text-primary-text sm:text-5xl">
+          <span className="ms-stamp text-4xl font-extrabold text-primary-text sm:text-5xl">
             {data.currentStreak}
           </span>
           <span className="text-sm text-muted-foreground">
@@ -146,20 +146,26 @@ export function ActivitySection({
         </p>
       </div>
 
+      {/* Heatmap com tilt raso; cada célula PINTA ao entrar na viewport, em
+          cascata (handoff §7 · 4a/4i). A célula de hoje pulsa: é a que importa. */}
       <div className="mt-5 overflow-x-auto">
         <div
-          className="grid grid-flow-col grid-rows-7 gap-[3px]"
+          data-ms-tilt="3"
+          className="ms-heatmap grid grid-flow-col grid-rows-7 gap-[3px]"
           style={{ gridTemplateColumns: `repeat(${weeks}, 1fr)` }}
           aria-hidden="true"
         >
-          {cells.map((cell) =>
+          {cells.map((cell, i) =>
             cell.future ? (
               <div key={cell.key} className="size-3 sm:size-[13px]" />
             ) : (
               <div
                 key={cell.key}
                 title={`${cell.key}: ${cell.reviews} ${cell.reviews === 1 ? "revisão" : "revisões"}`}
-                className={`size-3 sm:size-[13px] ${LEVEL_BG[level(cell.reviews)]}`}
+                style={{ "--ms-i": i } as React.CSSProperties}
+                className={`ms-cell size-3 sm:size-[13px] ${LEVEL_BG[level(cell.reviews)]} ${
+                  cell.key === todayKey ? "ms-today" : ""
+                }`}
               />
             ),
           )}

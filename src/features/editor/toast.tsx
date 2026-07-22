@@ -58,7 +58,7 @@ export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (
         <div
           key={toast.id}
           role={toast.kind === "error" ? "alert" : "status"}
-          className="pointer-events-auto flex max-w-md items-center gap-3 bg-foreground px-4 py-3 text-sm text-background shadow-lg"
+          className="ms-stamp pointer-events-auto flex max-w-md items-center gap-3 bg-foreground px-4 py-3 text-sm text-background shadow-lg"
           style={
             toast.kind === "error"
               ? { borderLeft: "4px solid var(--primary)" }
@@ -73,6 +73,8 @@ export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (
                 toast.action?.onClick();
                 dismiss(toast.id);
               }}
+              data-ms-magnetic
+              data-ms-ripple="danger"
               className="shrink-0 font-semibold text-background underline underline-offset-4 transition-opacity duration-150 ease-out hover:opacity-80"
             >
               {toast.action.label}
@@ -82,6 +84,7 @@ export function ToastHost({ toasts, dismiss }: { toasts: ToastItem[]; dismiss: (
             type="button"
             aria-label="Fechar aviso"
             onClick={() => dismiss(toast.id)}
+            data-ms-ripple="ink"
             className="shrink-0 text-background/70 transition-colors duration-150 ease-out hover:text-background"
           >
             ×

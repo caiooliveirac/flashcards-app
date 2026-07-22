@@ -27,7 +27,7 @@ export function SiteHeader({
   return (
     <header className="border-b-2 border-divider">
       <div className="mx-auto flex max-w-5xl items-center gap-6 px-5 py-3.5">
-        <Link href="/" className="shrink-0">
+        <Link href="/" data-ms-tilt="6" data-ms-shadow className="shrink-0">
           <BrandMark />
         </Link>
         {showNav ? (

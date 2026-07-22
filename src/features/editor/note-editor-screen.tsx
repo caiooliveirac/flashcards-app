@@ -33,6 +33,8 @@ import { collectGroupKeysFromDoc } from "@/lib/editor/cloze-node";
 import { editorExtensions } from "@/lib/editor/extensions";
 import type { NotePmDocs } from "@/lib/editor/parse";
 import { pmDocsToNoteContent } from "@/lib/editor/serialize";
+import { LiveCount } from "@/lib/motion/components";
+import { emitMotion } from "@/lib/motion/events";
 import { renderNoteContent } from "@/lib/render";
 
 /**
@@ -449,7 +451,8 @@ export function NoteEditorScreen({
     }
   }
 
-  async function handleSave() {
+  /** `trailFrom`: origem do energy trail (o botão clicado), quando houver. */
+  async function handleSave(trailFrom?: Element | null) {
     if (saving) return;
     // #12: salvar com upload em andamento persistiria um doc sem o assetId
     // final (ou referenciaria asset ainda 'pending') — bloqueia sem limpar nada.
@@ -516,6 +519,11 @@ export function NoteEditorScreen({
       return;
     }
     const { noteId, cardCount } = res;
+    // Energy trail: a nota viaja da prévia até o contador, que carimba (4g/2a).
+    emitMotion("card:saved", {
+      sourceEl: trailFrom ?? document.querySelector("[data-ms-trail-source]"),
+      deckEl: document.querySelector("[data-ms-trail-target]"),
+    });
     setSessionCards((n) => n + cardCount);
     push({
       kind: "success",
@@ -594,7 +602,11 @@ export function NoteEditorScreen({
     currentKind === "basic" ? (
       <section aria-label="Prévia do card">
         <h2 className={KICKER}>Prévia</h2>
-        <div className="mt-2 border border-border bg-surface p-3 text-sm">
+        <div
+          data-ms-tilt="5"
+          data-ms-trail-source
+          className="ms-matter ms-specular mt-2 border border-border bg-surface p-3 text-sm"
+        >
           {basicPreview ? (
             renderNoteContent(basicPreview, renderOpts)
           ) : (
@@ -607,7 +619,11 @@ export function NoteEditorScreen({
     ) : (
       <section aria-label="Prévia dos cards que serão criados">
         <h2 className={KICKER}>Prévia</h2>
-        <div className="mt-2 border border-border bg-surface p-3 text-sm">
+        <div
+          data-ms-tilt="5"
+          data-ms-trail-source
+          className="ms-matter ms-specular mt-2 border border-border bg-surface p-3 text-sm"
+        >
           Este texto criará{" "}
           <span className="font-extrabold">{preview.length}</span>{" "}
           {preview.length === 1 ? "card" : "cards"}
@@ -811,6 +827,7 @@ export function NoteEditorScreen({
                   <button
                     type="button"
                     onClick={removeSelectedCloze}
+                    data-ms-ripple="danger"
                     className="min-h-11 border border-border bg-background px-3 transition-colors duration-150 ease-out hover:bg-surface"
                   >
                     Remover ocultação
@@ -818,6 +835,7 @@ export function NoteEditorScreen({
                   <button
                     type="button"
                     onClick={editSelectedClozeHint}
+                    data-ms-ripple="ink"
                     className="min-h-11 border border-border bg-background px-3 transition-colors duration-150 ease-out hover:bg-surface"
                   >
                     {selectedCloze.hint ? "Trocar dica" : "Adicionar dica"}
@@ -826,6 +844,7 @@ export function NoteEditorScreen({
                     type="button"
                     aria-label="Fechar painel da ocultação"
                     onClick={() => setSelectedCloze(null)}
+                    data-ms-ripple="ink"
                     className="ml-auto min-h-11 min-w-11 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
                   >
                     ×
@@ -878,8 +897,10 @@ export function NoteEditorScreen({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => void handleSave()}
+            onClick={(e) => void handleSave(e.currentTarget)}
             disabled={saving}
+            data-ms-magnetic
+            data-ms-ripple="create"
             className={`min-h-12 w-full px-6 text-sm font-semibold transition-colors duration-150 ease-out disabled:opacity-60 sm:w-auto ${
               isEdit
                 ? "bg-primary text-primary-foreground hover:bg-primary-hover"
@@ -895,9 +916,14 @@ export function NoteEditorScreen({
             ) : null}
             {!isEdit ? (
               <span aria-live="polite">
-                {sessionCards > 0
-                  ? `${plural(sessionCards, "card criado", "cards criados")} em ${deckName}`
-                  : `criando em ${deckName}`}
+                {sessionCards > 0 ? (
+                  <span data-ms-trail-target>
+                    <LiveCount value={sessionCards} variant="stamp" />{" "}
+                    {sessionCards === 1 ? "card criado" : "cards criados"} em {deckName}
+                  </span>
+                ) : (
+                  `criando em ${deckName}`
+                )}
               </span>
             ) : null}
           </span>

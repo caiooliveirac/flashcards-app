@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import { BRAND } from "@/lib/brand";
 import { AssistantMount } from "@/components/ai-assistant/assistant-mount";
+import { MotionRoot } from "@/lib/motion/motion-root";
+import { TrailLayer } from "@/lib/motion/trail-layer";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -25,6 +27,8 @@ export default function RootLayout({
       <body className="min-h-dvh antialiased">
         {children}
         <AssistantMount />
+        <MotionRoot />
+        <TrailLayer />
       </body>
     </html>
   );
