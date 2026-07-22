@@ -7,6 +7,8 @@ import { listDecks, type DeckListItem } from "@/features/decks/service";
 import { deckTemperatures, type DeckTemperature } from "@/features/decks/temperature";
 import { reviewCountsByDeck } from "@/features/review/service";
 import { auth, signOut } from "@/lib/auth";
+import { KineticText } from "@/lib/motion/components";
+import { tiltForTemperature } from "@/lib/motion/tokens";
 
 const KICKER = "text-[11px] uppercase tracking-[0.1em] font-semibold";
 const HIBERNATION_DAYS = 14;
@@ -135,10 +137,16 @@ function DeckCell({
   now: Date;
 }) {
   const { deck, dueCount } = item;
+  // O calor é físico: quanto mais quente o baralho, mais ele inclina (handoff §7).
+  const tilt = dueCount > 0 ? tiltForTemperature(item.temp.tier) : 4;
   return (
     <article
+      data-ms-tilt={tilt}
+      // Pilha e spotlight são exclusivos do baralho urgente (handoff §7): é ele
+      // que tem massa de cartas atrás e é nele que o accent significa algo.
+      {...(urgent ? { "data-ms-spotlight": "always" } : {})}
       className={`flex flex-col p-5 sm:p-6 ${
-        urgent ? (backlog ? "bg-urgent-strong" : "bg-urgent") : "bg-background"
+        urgent ? `ms-stack ${backlog ? "bg-urgent-strong" : "bg-urgent"}` : "bg-background"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -177,6 +185,9 @@ function DeckCell({
       {dueCount > 0 ? (
         <Link
           href={`/decks/${deck.id}/review`}
+          data-ms-press
+          data-ms-magnetic
+          data-ms-ripple="ink"
           className="mt-3 inline-flex min-h-11 items-center self-start text-sm font-semibold underline-offset-4 hover:underline"
         >
           Revisar →
@@ -311,6 +322,7 @@ export default async function HomePage({
         >
           <button
             type="submit"
+            data-ms-ripple="ink"
             className="min-h-9 border border-border px-3 text-sm transition-colors duration-150 ease-out hover:bg-surface"
           >
             Sair
@@ -349,6 +361,9 @@ export default async function HomePage({
             </ol>
             <Link
               href="/decks/new"
+              data-ms-press
+              data-ms-magnetic
+              data-ms-ripple="create"
               className="mt-8 hidden min-h-12 items-center bg-primary px-6 font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover sm:inline-flex"
             >
               Criar primeiro baralho
@@ -358,13 +373,20 @@ export default async function HomePage({
           <>
             <section className="border-b-2 border-divider py-8 sm:py-12">
               <p className={`${KICKER} text-primary-text`}>{dateKicker}</p>
-              <h1 className="mt-3 max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]">
-                {headline}
-              </h1>
+              {/* Headline entra palavra a palavra — stamp editorial (handoff §7 · 4e) */}
+              <KineticText
+                as="h1"
+                text={headline}
+                by="word"
+                className="mt-3 block max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]"
+              />
               <p className="mt-3 text-sm text-muted-foreground sm:text-base">{subline}</p>
               {urgentDeck ? (
                 <Link
                   href={`/decks/${urgentDeck.deck.id}/review${reviewSuffix}`}
+                  data-ms-press
+                  data-ms-magnetic
+                  data-ms-ripple={backlog ? "accent" : "ink"}
                   className="mt-6 hidden min-h-11 items-center bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover sm:inline-flex"
                 >
                   {backlog ? "Recuperar atrasados" : "Começar revisão"}
@@ -377,6 +399,9 @@ export default async function HomePage({
                 <h2 className={`${KICKER} text-muted-foreground`}>Baralhos</h2>
                 <Link
                   href="/decks/new"
+                  data-ms-press
+                  data-ms-magnetic
+                  data-ms-ripple="create"
                   className="inline-flex min-h-11 items-center text-sm font-semibold underline-offset-4 hover:underline"
                 >
                   + Novo baralho
@@ -443,12 +468,16 @@ export default async function HomePage({
             <>
               <Link
                 href={`/decks/${urgentDeck.deck.id}/review${reviewSuffix}`}
+                data-ms-press
+                data-ms-ripple={backlog ? "accent" : "ink"}
                 className="flex min-h-12 flex-1 items-center justify-center bg-primary px-4 font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
               >
                 {backlog ? "Recuperar" : "Revisar"} — {totalDue}
               </Link>
               <Link
                 href={createHref}
+                data-ms-press
+                data-ms-ripple="create"
                 className="flex min-h-12 items-center justify-center border border-divider px-5 font-semibold text-foreground"
               >
                 Criar
@@ -457,6 +486,8 @@ export default async function HomePage({
           ) : hasDecks ? (
             <Link
               href={createHref}
+              data-ms-press
+              data-ms-ripple="create"
               className="flex min-h-12 flex-1 items-center justify-center border border-divider px-4 font-semibold text-foreground"
             >
               Criar
@@ -464,6 +495,8 @@ export default async function HomePage({
           ) : (
             <Link
               href="/decks/new"
+              data-ms-press
+              data-ms-ripple="create"
               className="flex min-h-12 flex-1 items-center justify-center bg-primary px-4 font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
             >
               Criar primeiro baralho

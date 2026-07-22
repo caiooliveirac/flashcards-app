@@ -8,6 +8,7 @@ import {
   updateDeckAction,
 } from "@/features/decks/actions";
 import type { DeckStatus } from "@/features/decks/service";
+import { IconMorph } from "@/lib/motion/icon-morph";
 
 interface DeckMenuProps {
   deckId: string;
@@ -63,9 +64,10 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
+        data-ms-ripple="ink"
         className="flex h-11 w-11 items-center justify-center border border-border text-sm leading-none transition-colors duration-150 ease-out hover:bg-surface"
       >
-        <span aria-hidden="true">⋯</span>
+        <IconMorph variant="menu" />
       </button>
 
       {open ? (
@@ -73,14 +75,14 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
           id={panelId}
           className="absolute right-0 z-10 mt-1 w-44 border border-divider bg-background p-1 shadow-lg"
         >
-          <Link href={`/decks/${deckId}/edit`} className={itemClass}>
+          <Link href={`/decks/${deckId}/edit`} data-ms-ripple="ink" className={itemClass}>
             Editar
           </Link>
 
           <form action={updateDeckAction}>
             <input type="hidden" name="deckId" value={deckId} />
             <input type="hidden" name="status" value={isPaused || isArchived ? "active" : "paused"} />
-            <button type="submit" className={itemClass}>
+            <button type="submit" data-ms-ripple="ink" className={itemClass}>
               {isPaused || isArchived ? "Reativar" : "Pausar"}
             </button>
           </form>
@@ -89,7 +91,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
             <form action={updateDeckAction}>
               <input type="hidden" name="deckId" value={deckId} />
               <input type="hidden" name="status" value="archived" />
-              <button type="submit" className={itemClass}>
+              <button type="submit" data-ms-ripple="ink" className={itemClass}>
                 Arquivar
               </button>
             </form>
@@ -98,7 +100,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
           <form action={reorderDeckAction}>
             <input type="hidden" name="deckId" value={deckId} />
             <input type="hidden" name="direction" value="up" />
-            <button type="submit" className={itemClass}>
+            <button type="submit" data-ms-ripple="ink" className={itemClass}>
               Subir
             </button>
           </form>
@@ -106,7 +108,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
           <form action={reorderDeckAction}>
             <input type="hidden" name="deckId" value={deckId} />
             <input type="hidden" name="direction" value="down" />
-            <button type="submit" className={itemClass}>
+            <button type="submit" data-ms-ripple="ink" className={itemClass}>
               Descer
             </button>
           </form>
@@ -120,7 +122,7 @@ export function DeckMenu({ deckId, deckName, status }: DeckMenuProps) {
             }}
           >
             <input type="hidden" name="deckId" value={deckId} />
-            <button type="submit" className={`${itemClass} text-destructive`}>
+            <button type="submit" data-ms-ripple="danger" className={`${itemClass} text-destructive`}>
               Excluir
             </button>
           </form>

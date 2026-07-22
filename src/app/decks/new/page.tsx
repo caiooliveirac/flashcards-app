@@ -45,6 +45,7 @@ export default async function NewDeckPage({
         >
           <button
             type="submit"
+            data-ms-ripple="ink"
             className="min-h-11 border border-border px-4 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-surface"
           >
             Sair
@@ -107,6 +108,8 @@ export default async function NewDeckPage({
           </div>
           <button
             type="submit"
+            data-ms-magnetic
+            data-ms-ripple="create"
             className="inline-flex min-h-12 items-center justify-center bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
           >
             Criar baralho

@@ -10,6 +10,7 @@ import {
   moveNoteAction,
   restoreNoteAction,
 } from "@/features/notes/actions";
+import { IconMorph } from "@/lib/motion/icon-morph";
 
 /**
  * Lista de notas do deck detail com menu por nota (Editar/Duplicar/Mover/
@@ -99,20 +100,22 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
+        data-ms-ripple="ink"
         className="flex h-11 w-11 items-center justify-center border border-border text-sm leading-none transition-colors duration-150 ease-out hover:bg-surface"
       >
-        ⋯
+        <IconMorph variant="menu" />
       </button>
       {open ? (
         <div
           id={panelId}
           className="absolute right-0 z-30 mt-1 w-56 border border-divider bg-background p-1 shadow-lg"
         >
-          <Link href={`/notes/${note.id}/edit`} className={itemClass}>
+          <Link href={`/notes/${note.id}/edit`} data-ms-ripple="ink" className={itemClass}>
             Editar
           </Link>
           <button
             type="button"
+            data-ms-ripple="create"
             className={itemClass}
             onClick={() => {
               close();
@@ -125,6 +128,7 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
             <button
               type="button"
               aria-expanded={moving}
+              data-ms-ripple="ink"
               className={itemClass}
               onClick={() => setMoving((v) => !v)}
             >
@@ -159,6 +163,8 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
                   close();
                   onMove(note.id, targetDeck);
                 }}
+                data-ms-magnetic
+                data-ms-ripple="ink"
                 className="min-h-11 bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover disabled:opacity-50"
               >
                 Mover
@@ -167,6 +173,7 @@ function NoteMenu({ note, decks, onDuplicate, onMove, onDelete }: NoteMenuProps)
           ) : null}
           <button
             type="button"
+            data-ms-ripple="danger"
             className={`${itemClass} text-destructive`}
             onClick={() => {
               close();
@@ -251,7 +258,7 @@ export function NotesList({ notes, decks }: NotesListProps) {
           return (
             <li
               key={note.id}
-              className="border-b border-border transition-colors duration-150 ease-out hover:bg-surface"
+              className="ms-reveal ms-lift border-b border-border transition-colors duration-150 ease-out hover:bg-surface"
             >
               <div className="flex items-start gap-3 py-4 md:grid md:grid-cols-[90px_minmax(0,1fr)_200px_150px_44px] md:gap-x-4">
                 <div className="hidden md:block">

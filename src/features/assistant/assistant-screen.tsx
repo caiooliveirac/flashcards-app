@@ -192,6 +192,8 @@ export function AssistantScreen({
           <button
             type="button"
             onClick={() => run("initial")}
+            data-ms-magnetic
+            data-ms-ripple="ink"
             disabled={pending}
             className="min-h-11 bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
@@ -276,6 +278,8 @@ export function AssistantScreen({
                     <button
                       type="button"
                       onClick={() => accept(item)}
+                      data-ms-magnetic
+                      data-ms-ripple="create"
                       disabled={pending || item.status === "saving"}
                       className="ml-auto min-h-9 border border-border px-3 text-sm font-semibold transition-colors hover:bg-surface disabled:opacity-50"
                     >
@@ -311,6 +315,7 @@ export function AssistantScreen({
               <button
                 type="button"
                 onClick={() => run("revise")}
+                data-ms-ripple="ink"
                 disabled={pending}
                 className="min-h-11 border border-border px-4 text-sm font-semibold transition-colors hover:bg-surface disabled:opacity-50"
               >
@@ -319,6 +324,7 @@ export function AssistantScreen({
               <button
                 type="button"
                 onClick={() => run("more")}
+                data-ms-ripple="ink"
                 disabled={pending}
                 className="min-h-11 border border-border px-4 text-sm font-semibold transition-colors hover:bg-surface disabled:opacity-50"
               >
@@ -328,6 +334,8 @@ export function AssistantScreen({
                 <button
                   type="button"
                   onClick={acceptAll}
+                  data-ms-magnetic
+                  data-ms-ripple="create"
                   disabled={pending}
                   className="ml-auto min-h-11 bg-primary px-4 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                 >

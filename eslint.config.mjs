@@ -4,7 +4,8 @@ import nextTypescript from "eslint-config-next/typescript";
 
 export default defineConfig([
   {
-    ignores: [".next/**", "node_modules/**", "src/db/migrations/**", "dist/**"],
+    // handoff/: protótipos de referência do design (HTML+JS exportado), não é código do app.
+    ignores: [".next/**", "node_modules/**", "src/db/migrations/**", "dist/**", "handoff/**"],
   },
   ...nextCoreWebVitals,
   ...nextTypescript,

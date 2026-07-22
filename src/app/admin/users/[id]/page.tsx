@@ -37,6 +37,7 @@ export default async function AdminUserPage({
         >
           <button
             type="submit"
+            data-ms-ripple="ink"
             className="min-h-11 border border-divider px-4 text-sm font-semibold hover:bg-surface"
           >
             Sair

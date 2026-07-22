@@ -61,6 +61,7 @@ function ToolbarButton({
       // preventDefault: iOS Safari perde a seleção do editor no mousedown (R10).
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
+      data-ms-ripple={variant === "primary" ? "create" : "ink"}
       className={`min-h-11 min-w-11 border px-2.5 text-sm transition-colors duration-150 ease-out disabled:opacity-40 ${surface}`}
     >
       {children}

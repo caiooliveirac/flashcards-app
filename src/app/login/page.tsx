@@ -98,6 +98,8 @@ export default async function LoginPage({
             </div>
             <button
               type="submit"
+              data-ms-magnetic
+              data-ms-ripple="ink"
               className="min-h-12 w-full bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
             >
               Entrar
@@ -108,6 +110,8 @@ export default async function LoginPage({
             <form className="mt-3" action={googleLogin}>
               <button
                 type="submit"
+                data-ms-magnetic
+                data-ms-ripple="ink"
                 className="min-h-12 w-full border border-divider px-4 font-semibold hover:bg-surface"
               >
                 Entrar com Google

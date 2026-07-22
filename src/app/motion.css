@@ -1,0 +1,682 @@
+/* ============================================================
+ * Motion System — "Camada de Vida" (handoff §1–§3).
+ *
+ * Composição: cada comportamento escreve numa propriedade de transform
+ * DIFERENTE, para nenhum sobrescrever o outro.
+ *   magnetismo → `translate`   (rAF; mola de volta por transição)
+ *   press      → `scale`       (transição CSS, mola `--spring`)
+ *   tilt       → `transform`   (rAF; precisa de perspective())
+ * A ordem que o CSS aplica é translate → rotate → scale → transform.
+ *
+ * Só transform / opacity / clip-path são animados. Sombras são duras
+ * (offset sem blur, Modernist) e mudam por deslocamento, não por blur.
+ * ============================================================ */
+
+:root {
+  /* Mola amostrada — espelha SPRING de src/lib/motion/tokens.ts */
+  --spring: linear(
+    0,
+    0.062 2.5%,
+    0.235 5.4%,
+    0.665 11.4%,
+    0.885 15%,
+    1.065 20.3%,
+    1.117 24.6%,
+    1.118 28.5%,
+    1.038 38.8%,
+    0.99 48.4%,
+    0.997 66.3%,
+    1
+  );
+  --spring-soft-ms: 550ms;
+  --spring-snappy-ms: 380ms;
+  --press-ms: 70ms;
+  --press-scale: 0.96;
+}
+
+/* ---------------------------------------------------------------- *
+ * 1. Press global — nada clicável fica visualmente morto.
+ * ---------------------------------------------------------------- */
+:where(button, [role="button"], summary, [data-ms-press]) {
+  scale: var(--ms-press, 1);
+  transition: scale var(--spring-soft-ms) var(--spring);
+}
+
+:where(button, [role="button"], summary, [data-ms-press]):not(:disabled):active {
+  --ms-press: var(--press-scale);
+  transition: scale var(--press-ms) ease-out;
+}
+
+/* Links de texto não escalam (mexeria com o fluxo); afundam em opacidade. */
+a:not([data-ms-press]):active {
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------- *
+ * 2. Magnetismo — atração de alguns px; solta com mola.
+ * ---------------------------------------------------------------- */
+[data-ms-magnetic] {
+  translate: var(--ms-x, 0px) var(--ms-y, 0px);
+}
+
+[data-ms-magnetic][data-ms-release] {
+  transition:
+    translate var(--spring-soft-ms) var(--spring),
+    scale var(--spring-soft-ms) var(--spring);
+}
+
+/* ---------------------------------------------------------------- *
+ * 3. Ripple semântico — onda quadrada, recortada por camada própria
+ *    (não tocamos no overflow do host, que clipparia menus).
+ * ---------------------------------------------------------------- */
+[data-ms-ripple] {
+  position: relative;
+}
+
+.ms-ripple-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------------------------------------------------------------- *
+ * 4. Tilt + sombra dura com inércia.
+ *    A sombra segue com atraso (--ms-shx/--ms-shy vindos do rAF), o que
+ *    dá a sensação de massa: o objeto vira antes da sombra alcançar.
+ * ---------------------------------------------------------------- */
+[data-ms-tilt] {
+  transform: perspective(900px) rotateX(var(--ms-rx, 0deg)) rotateY(var(--ms-ry, 0deg));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+[data-ms-tilt][data-ms-shadow] {
+  box-shadow: var(--ms-shx, 0px) var(--ms-shy, 6px) 0 0 var(--color-border);
+  transition: box-shadow var(--spring-soft-ms) var(--spring);
+}
+
+/* Enquanto o cursor está em cima o rAF manda: transição de sombra sai de cena. */
+[data-ms-tilt][data-ms-lift] {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------- *
+ * 5. Spotlight — luz que segue o cursor sobre a superfície.
+ * ---------------------------------------------------------------- */
+[data-ms-spotlight] {
+  position: relative;
+}
+
+[data-ms-spotlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--ms-spot, 0);
+  transition: opacity var(--spring-snappy-ms) ease-out;
+  /* Presença, não brilho: uma tinta de accent bem fraca e de queda curta.
+   * Só entra em superfície onde o accent JÁ significa urgência. */
+  background: radial-gradient(
+    220px circle at var(--ms-mx, 50%) var(--ms-my, 50%),
+    color-mix(in srgb, var(--primary) 7%, transparent),
+    transparent 60%
+  );
+}
+
+/* Spotlight permanente do baralho urgente: não espera o cursor. */
+[data-ms-spotlight="always"]::after {
+  opacity: max(var(--ms-spot, 0), 0.4);
+}
+
+/* ---------------------------------------------------------------- *
+ * 6. Campo ambiente (canvas de pontos atrás da superfície).
+ * ---------------------------------------------------------------- */
+[data-ms-field] {
+  position: relative;
+}
+
+.ms-field-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-ms-field] > *:not(.ms-field-canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------- *
+ * 7. Matéria do flashcard (handoff §3 · 4b) — espessura, brilho, máscara.
+ * ---------------------------------------------------------------- */
+
+/* Lastro atrás da face: no tilt aparece como espessura real do card. */
+.ms-matter {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.ms-matter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  translate: 0 0 -7px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  pointer-events: none;
+}
+
+/* Brilho especular seguindo o cursor — só opacidade anima. */
+.ms-specular::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--ms-spot, 0);
+  transition: opacity var(--spring-snappy-ms) ease-out;
+  background: radial-gradient(
+    340px circle at var(--ms-mx, 50%) var(--ms-my, 50%),
+    color-mix(in srgb, var(--foreground) 7%, transparent),
+    transparent 65%
+  );
+}
+
+/* Flip da revelação (handoff §3 · 4b).
+ *
+ * DESVIO consciente do protótipo: lá o card gira 180° porque frente e verso são
+ * faces separadas. Aqui a revisão mostra pergunta E resposta juntas — girar
+ * esconderia a pergunta e mudaria o fluxo de estudo. Então o card dá a virada
+ * (impulso de rotateY com a mola, 800ms, espessura visível pelo preserve-3d) e
+ * quem revela a resposta é o obturador abaixo. A leitura física se mantém. */
+@keyframes ms-flip-impulse {
+  0% {
+    transform: perspective(900px) rotateY(0deg);
+  }
+  38% {
+    transform: perspective(900px) rotateY(-14deg);
+  }
+  100% {
+    transform: perspective(900px) rotateY(0deg);
+  }
+}
+
+/* Sem `fill`: ao terminar, o transform volta para a regra de tilt. Com
+ * `forwards` a última keyframe congelaria e mataria o tilt do card. */
+.ms-flip-impulse {
+  animation: ms-flip-impulse 800ms var(--spring);
+}
+
+/* Resposta revelada por OBTURADOR (clip-path), nunca por fade. */
+@keyframes ms-shutter {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.ms-shutter {
+  animation: ms-shutter var(--spring-soft-ms) var(--spring) both;
+}
+
+/* ---------------------------------------------------------------- *
+ * 8. Pilha do baralho — camadas em parallax atrás da célula (handoff §3 · 4a).
+ *    Multiplicadores -0.25 / -0.5 de --ms-shx: as cartas de baixo reagem
+ *    menos, então a pilha ganha profundidade em vez de deslizar em bloco.
+ * ---------------------------------------------------------------- */
+/* A grade da home é densa (células coladas), então sem subir o índice de
+ * empilhamento as cartas de trás ficam escondidas pela célula vizinha. */
+.ms-stack {
+  position: relative;
+  z-index: 1;
+}
+
+.ms-stack::before,
+.ms-stack::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid var(--color-border);
+  /* Cartas SÓLIDAS atrás, não contornos fantasma: sem fundo próprio elas
+   * apareceriam como caixas duplicadas por cima do canvas da página. */
+  background: var(--color-surface);
+  z-index: -1;
+}
+
+.ms-stack::before {
+  translate: calc(var(--ms-shx, 0px) * -0.25) 5px;
+}
+
+.ms-stack::after {
+  translate: calc(var(--ms-shx, 0px) * -0.5) 10px;
+}
+
+/* ---------------------------------------------------------------- *
+ * 8b. Levantar a linha (handoff §7 · 4b) — "a nota é uma ficha física".
+ *     Sobe 2px com sombra dura; volta com mola. Só translate + box-shadow
+ *     de offset (sem blur), coerente com o Modernist.
+ * ---------------------------------------------------------------- */
+.ms-lift {
+  transition:
+    translate var(--spring-soft-ms) var(--spring),
+    box-shadow var(--spring-soft-ms) var(--spring);
+}
+
+@media (hover: hover) {
+  .ms-lift:hover {
+    translate: 0 -2px;
+    box-shadow: 3px 3px 0 0 var(--color-border);
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * 8c. Heatmap de constância (handoff §7 · 4i) — pinta célula a célula ao
+ *     entrar na viewport; a célula de hoje pulsa (é a única que você pode
+ *     ainda mudar). Sem scroll timeline, tudo já aparece pintado.
+ * ---------------------------------------------------------------- */
+@keyframes ms-cell-in {
+  from {
+    scale: 0.3;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+
+@keyframes ms-today-pulse {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.3;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .ms-heatmap .ms-cell {
+      animation: ms-cell-in var(--spring-snappy-ms) var(--spring) both;
+      /* Cascata curta: 6ms por célula, senão a última só pinta muito depois. */
+      animation-delay: calc(var(--ms-i, 0) * 6ms);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ms-heatmap .ms-today {
+    animation: ms-today-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * 9. Contagem viva (handoff §7 · 2a) — números nunca trocam secos.
+ * ---------------------------------------------------------------- */
+@keyframes ms-flip-in {
+  from {
+    transform: perspective(400px) rotateX(-70deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(400px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+.ms-flip {
+  animation: ms-flip-in var(--spring-snappy-ms) var(--spring) both;
+}
+
+/* Régua imprime da esquerda para a direita (microcelebração, 4h).
+ * scaleX com origem à esquerda: só transform, sem animar `width`. */
+@keyframes ms-print {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.ms-print {
+  transform-origin: left center;
+  animation: ms-print 900ms var(--spring) both;
+  animation-delay: calc(var(--ms-i, 0) * 90ms);
+}
+
+/* A mola passa de 1 (overshoot 1.118): sem recorte, a barra vaza da régua.
+ * O clip fica no trilho, que é quem conhece o limite. */
+:has(> .ms-print) {
+  overflow: hidden;
+}
+
+/* Carimbo: o número assenta com mola em vez de aparecer. */
+@keyframes ms-stamp-in {
+  from {
+    scale: 1.35;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+
+.ms-stamp {
+  animation: ms-stamp-in var(--spring-soft-ms) var(--spring) both;
+}
+
+/* ---------------------------------------------------------------- *
+ * 10. Tipografia cinética (handoff §3 · 4e) — letras assentam em cascata.
+ * ---------------------------------------------------------------- */
+/* Stamp editorial: a palavra SOBE por trás de uma máscara. Nunca fade — o
+ * design system proíbe entrada por opacidade, e um fade em headline ainda
+ * derruba o contraste medido no meio da transição (axe flagra, com razão). */
+@keyframes ms-letter-in {
+  from {
+    transform: translateY(0.32em);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    transform: translateY(0);
+    clip-path: inset(-0.25em 0 -0.15em 0);
+  }
+}
+
+.ms-kinetic > span {
+  display: inline-block;
+  white-space: pre;
+  animation: ms-letter-in var(--spring-snappy-ms) var(--spring) both;
+  animation-delay: calc(var(--ms-i, 0) * 25ms);
+}
+
+/* Headlines entram palavra a palavra (stagger 30ms), 1× por montagem. */
+.ms-kinetic-words > span {
+  animation-delay: calc(var(--ms-i, 0) * 30ms);
+}
+
+/* ---------------------------------------------------------------- *
+ * 10b. Morphing de ícones (handoff §3 · 4d) — as MESMAS barras se movem,
+ *      nunca há troca de glifo. Cada barra é um retângulo de raio zero.
+ *
+ *      ⋯ → ×: as duas esferas externas esticam e viram os traços da cruz;
+ *      a do meio some. Nada aparece do nada, nada desaparece por corte.
+ * ---------------------------------------------------------------- */
+.ms-morph {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.ms-morph > i {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 14px;
+  height: 2px;
+  margin: -1px 0 0 -7px;
+  background: currentColor;
+  translate: var(--ms-dx, 0px) var(--ms-dy, 0px);
+  rotate: var(--ms-rot, 0deg);
+  scale: var(--ms-sx, 0.15) 1;
+  opacity: var(--ms-o, 1);
+  transition:
+    translate var(--spring-snappy-ms) var(--spring),
+    rotate var(--spring-snappy-ms) var(--spring),
+    scale var(--spring-snappy-ms) var(--spring),
+    opacity var(--spring-snappy-ms) var(--spring);
+}
+
+/* Repouso: três pontos quadrados. */
+.ms-morph[data-ms-morph="menu"] > i:nth-child(1) {
+  --ms-dx: -5px;
+}
+
+.ms-morph[data-ms-morph="menu"] > i:nth-child(3) {
+  --ms-dx: 5px;
+}
+
+/* Aberto: as externas convergem e esticam em ×; a central esvai. */
+[aria-expanded="true"] .ms-morph[data-ms-morph="menu"] > i:nth-child(1) {
+  --ms-dx: 0px;
+  --ms-rot: 45deg;
+  --ms-sx: 1;
+}
+
+[aria-expanded="true"] .ms-morph[data-ms-morph="menu"] > i:nth-child(3) {
+  --ms-dx: 0px;
+  --ms-rot: -45deg;
+  --ms-sx: 1;
+}
+
+[aria-expanded="true"] .ms-morph[data-ms-morph="menu"] > i:nth-child(2) {
+  --ms-o: 0;
+  --ms-sx: 0.1;
+}
+
+/* + → ✓: a barra horizontal cai e gira; a vertical encurta e inclina. */
+.ms-morph[data-ms-morph="plus"] > i:nth-child(1) {
+  --ms-sx: 0.8;
+}
+
+.ms-morph[data-ms-morph="plus"] > i:nth-child(2) {
+  --ms-rot: 90deg;
+  --ms-sx: 0.8;
+}
+
+.ms-morph[data-ms-morph="plus"][data-ms-done] > i:nth-child(1) {
+  --ms-dx: 1px;
+  --ms-dy: 3px;
+  --ms-rot: -45deg;
+  --ms-sx: 0.62;
+}
+
+.ms-morph[data-ms-morph="plus"][data-ms-done] > i:nth-child(2) {
+  --ms-dx: -3px;
+  --ms-dy: 4px;
+  --ms-rot: 45deg;
+  --ms-sx: 0.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-morph > i {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * 10c. IA com corpo — o glifo ✳ (handoff §3 · 4f).
+ *
+ * Seis barras de raio zero em estrela. O estado NÃO troca de desenho: muda o
+ * ritmo. É a mesma criatura respirando devagar, girando ou dando um pulo.
+ * ---------------------------------------------------------------- */
+.ms-glyph {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+  rotate: var(--ms-glyph-rot, 0deg);
+}
+
+.ms-glyph > i {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 2px;
+  height: 18px;
+  margin: -9px 0 0 -1px;
+  background: currentColor;
+  rotate: calc(var(--ms-i, 0) * 60deg);
+  scale: 1 var(--ms-glyph-len, 1);
+  opacity: var(--ms-glyph-op, 0.55);
+  transition:
+    scale var(--spring-soft-ms) var(--spring),
+    opacity var(--spring-soft-ms) var(--spring);
+}
+
+/* repouso — respira devagar, quase parado. */
+@keyframes ms-glyph-breathe {
+  0%,
+  100% {
+    scale: 1 0.86;
+    opacity: 0.45;
+  }
+  50% {
+    scale: 1 1;
+    opacity: 0.7;
+  }
+}
+
+.ms-glyph[data-ms-glyph="repouso"] > i {
+  animation: ms-glyph-breathe 4.5s ease-in-out infinite;
+  animation-delay: calc(var(--ms-i, 0) * -0.35s);
+}
+
+/* observando — as barras acendem em varredura; o glifo está prestando atenção. */
+.ms-glyph[data-ms-glyph="observando"] > i {
+  animation: ms-glyph-breathe 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--ms-i, 0) * -0.12s);
+}
+
+/* raciocinando — gira contínuo: está processando, e isso é visível. */
+@keyframes ms-glyph-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.ms-glyph[data-ms-glyph="raciocinando"] {
+  animation: ms-glyph-spin 2.4s linear infinite;
+}
+
+.ms-glyph[data-ms-glyph="raciocinando"] > i {
+  --ms-glyph-op: 0.9;
+}
+
+/* insight — pulo duplo e volta: achou algo. */
+@keyframes ms-glyph-pop {
+  0%,
+  100% {
+    scale: 1;
+  }
+  30% {
+    scale: 1.35;
+  }
+  55% {
+    scale: 0.95;
+  }
+  75% {
+    scale: 1.18;
+  }
+}
+
+.ms-glyph[data-ms-glyph="insight"] {
+  animation: ms-glyph-pop 900ms var(--spring) infinite;
+}
+
+.ms-glyph[data-ms-glyph="insight"] > i {
+  --ms-glyph-op: 1;
+}
+
+/* executa — uma volta única e assenta. */
+.ms-glyph[data-ms-glyph="executa"] {
+  animation: ms-glyph-spin 700ms var(--spring) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-glyph,
+  .ms-glyph > i {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * 11. Tick de presença (handoff §7 · 2b) — varredura contínua de 2px.
+ * ---------------------------------------------------------------- */
+@keyframes ms-tick-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.ms-tick {
+  position: relative;
+  overflow: hidden;
+}
+
+.ms-tick::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 28px;
+  height: 2px;
+  background: var(--primary);
+  animation: ms-tick-sweep 7s linear infinite;
+}
+
+/* ---------------------------------------------------------------- *
+ * 12. Scroll choreography (handoff §3 · 4i) — progressive enhancement puro.
+ *     Sem suporte a scroll timeline, o conteúdo simplesmente já está lá.
+ * ---------------------------------------------------------------- */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes ms-reveal {
+      from {
+        clip-path: inset(0 0 100% 0);
+        transform: translateY(8px);
+      }
+      to {
+        clip-path: inset(0 0 0 0);
+        transform: translateY(0);
+      }
+    }
+
+    .ms-reveal {
+      animation: ms-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * 13. Respeito a prefers-reduced-motion.
+ *     O runtime já faz early return; aqui desligamos o que é puro CSS.
+ * ---------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role="button"], summary, [data-ms-press]):active {
+    --ms-press: 1;
+  }
+
+  .ms-tick::after,
+  .ms-kinetic > span,
+  .ms-shutter,
+  .ms-flip,
+  .ms-flip-impulse,
+  .ms-reveal,
+  .ms-print,
+  .ms-stamp {
+    animation: none;
+  }
+
+  .ms-matter::before,
+  .ms-specular::after,
+  [data-ms-spotlight]::after {
+    display: none;
+  }
+}

@@ -64,8 +64,12 @@ interface CounterItem {
 /** CounterStrip: faixa horizontal de contadores separados por réguas de 1px. */
 function CounterStrip({ counters }: { counters: CounterItem[] }) {
   return (
+    // Tilt raso (2°): a faixa inteira é uma placa; cada contador desloca no
+    // seu próprio parallax, o que dá espessura à régua (handoff §7 · 4a).
     <section
       aria-label="Resumo do baralho"
+      data-ms-tilt="2"
+      data-ms-trail-target
       className="grid grid-cols-2 border-y-2 border-divider sm:grid-cols-5"
     >
       {counters.map((c, i) => (
@@ -79,6 +83,12 @@ function CounterStrip({ counters }: { counters: CounterItem[] }) {
           ]
             .filter(Boolean)
             .join(" ")}
+          style={
+            {
+              // Multiplicador crescente: os contadores da direita reagem mais.
+              translate: `calc(var(--ms-shx, 0px) * ${(i * 0.06).toFixed(2)}) 0`,
+            } as React.CSSProperties
+          }
         >
           <p
             className={`font-extrabold leading-none tabular-nums ${
@@ -181,6 +191,8 @@ export default async function DeckDetailPage({
     "inline-flex min-h-12 items-center justify-center border border-border px-5 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-surface";
   const primaryCta =
     "inline-flex min-h-12 items-center justify-center bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover";
+  // Todo CTA é magnético e responde ao press (handoff §7 · 4c).
+  const ctaMotion = { "data-ms-press": "", "data-ms-magnetic": "" } as const;
 
   return (
     <div className="min-h-dvh">
@@ -201,6 +213,7 @@ export default async function DeckDetailPage({
         >
           <button
             type="submit"
+            data-ms-ripple="ink"
             className="min-h-11 border border-border px-4 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-surface"
           >
             Sair
@@ -235,29 +248,29 @@ export default async function DeckDetailPage({
           <div className="flex shrink-0 flex-wrap items-center gap-3">
             {dueCount > 0 ? (
               <>
-                <Link href={`/decks/${deckId}/review`} className={primaryCta}>
+                <Link href={`/decks/${deckId}/review`} {...ctaMotion} data-ms-ripple="ink" className={primaryCta}>
                   Revisar agora — {dueCount}
                 </Link>
-                <Link href={`/decks/${deckId}/new`} className={secondaryCta}>
+                <Link href={`/decks/${deckId}/new`} {...ctaMotion} data-ms-ripple="create" className={secondaryCta}>
                   Adicionar cards
                 </Link>
               </>
             ) : isEmpty ? (
-              <Link href={`/decks/${deckId}/new`} className={primaryCta}>
+              <Link href={`/decks/${deckId}/new`} {...ctaMotion} data-ms-ripple="create" className={primaryCta}>
                 Criar primeiro card
               </Link>
             ) : isDormant ? (
-              <Link href={`/decks/${deckId}/new`} className={primaryCta}>
+              <Link href={`/decks/${deckId}/new`} {...ctaMotion} data-ms-ripple="create" className={primaryCta}>
                 Adicionar conhecimento
               </Link>
             ) : (
               <>
                 {newCount > 0 ? (
-                  <Link href={`/decks/${deckId}/review`} className={secondaryCta}>
+                  <Link href={`/decks/${deckId}/review`} {...ctaMotion} data-ms-ripple="ink" className={secondaryCta}>
                     Estudar novos — {newCount}
                   </Link>
                 ) : null}
-                <Link href={`/decks/${deckId}/new`} className={secondaryCta}>
+                <Link href={`/decks/${deckId}/new`} {...ctaMotion} data-ms-ripple="create" className={secondaryCta}>
                   Adicionar cards
                 </Link>
               </>
@@ -309,6 +322,7 @@ export default async function DeckDetailPage({
             />
             <button
               type="submit"
+              data-ms-ripple="ink"
               className="mb-1 min-h-11 shrink-0 border border-border px-4 text-sm font-semibold transition-colors duration-150 ease-out hover:bg-surface"
             >
               Buscar

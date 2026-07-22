@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NoteContent } from "@/lib/content";
+import { LiveCount } from "@/lib/motion/components";
+import { emitMotion } from "@/lib/motion/events";
 import { renderBlocks, renderNoteContent } from "@/lib/render";
 import {
   buryCardAction,
@@ -26,16 +28,18 @@ export interface SessionCard {
 }
 
 const RATINGS = [
-  { value: 1, label: "Errei", key: "1" },
-  { value: 2, label: "Difícil", key: "2" },
-  { value: 3, label: "Bom", key: "3" },
-  { value: 4, label: "Fácil", key: "4" },
+  { value: 1, label: "Errei", key: "1", magnetism: 8 },
+  { value: 2, label: "Difícil", key: "2", magnetism: 6 },
+  { value: 3, label: "Bom", key: "3", magnetism: 5 },
+  { value: 4, label: "Fácil", key: "4", magnetism: 4 },
 ] as const;
 
 const KICKER = "text-[11px] font-semibold uppercase tracking-[0.08em]";
 // Learn-ahead (Anki): quando a fila principal esvazia, cards de learning que
 // vencem dentro desta janela são antecipados em vez de encerrar a sessão.
 const LEARN_AHEAD_MS = 20 * 60_000;
+// Mesma triagem da home: a partir daqui a sessão conta como resgate de backlog.
+const TRIAGE_SIZE = 20;
 
 interface LearnItem {
   card: SessionCard;
@@ -79,22 +83,36 @@ function formatNextDue(iso: string): string {
 
 function SessionChrome({
   deckName,
-  counter,
+  done,
+  remaining,
   progressPct,
+  ticking,
 }: {
   deckName: string;
-  counter: string;
+  done: number;
+  remaining: number | null;
   progressPct: number;
+  /** Enquanto a sessão corre, a barra ganha o tick de presença (2b). */
+  ticking?: boolean;
 }) {
   return (
     <header className="px-6 pt-5">
       <div className={`flex items-baseline justify-between gap-4 text-muted-foreground ${KICKER}`}>
         <span className="truncate">{deckName}</span>
+        {/* Contagem viva (2a): os números flipam, nunca trocam secos. */}
         <span aria-live="polite" className="shrink-0">
-          {counter}
+          {remaining === null ? (
+            <>
+              <LiveCount value={done} /> de {done}
+            </>
+          ) : (
+            <>
+              <LiveCount value={done} /> feitos · <LiveCount value={remaining} /> na fila
+            </>
+          )}
         </span>
       </div>
-      <div className="mt-2 h-[3px] bg-track">
+      <div className={`mt-2 h-[3px] bg-track ${ticking ? "ms-tick" : ""}`}>
         <div
           className="h-full bg-primary transition-[width] duration-[250ms] ease-out"
           style={{ width: `${progressPct}%` }}
@@ -136,6 +154,12 @@ export function ReviewSession({
   const [canUndo, setCanUndo] = useState(false);
 
   const total = cards.length;
+  // Espelho de reviewedCount para a celebração de fim de sessão ler sem virar
+  // dependência do efeito (senão ele reemitiria a cada revisão).
+  const reviewedRef = useRef(0);
+  useEffect(() => {
+    reviewedRef.current = reviewedCount;
+  }, [reviewedCount]);
   const keyRef = useRef<string>("");
   const shownAtRef = useRef<number>(0);
   const done = current === null;
@@ -173,6 +197,12 @@ export function ReviewSession({
     });
   }, []);
 
+  /** Revela a resposta e anuncia a coreografia (flip + obturador). */
+  const reveal = useCallback(() => {
+    setRevealed(true);
+    if (current) emitMotion("review:reveal", { cardId: current.cardId });
+  }, [current]);
+
   const rate = useCallback(
     async (rating: 1 | 2 | 3 | 4) => {
       const card = current;
@@ -193,6 +223,8 @@ export function ReviewSession({
         setPending(false);
         return;
       }
+      // Fato, não animação: quem escuta decide a coreografia (dock, campo…).
+      emitMotion("review:rated", { cardId: card.cardId, rating });
       setTally((t) => ({ ...t, [rating]: (t[rating] ?? 0) + 1 }));
       setReviewedCount((n) => n + 1);
       setElapsedMs((ms) => ms + durationMs);
@@ -282,7 +314,7 @@ export function ReviewSession({
       if (!current) return;
       if (!revealed && (e.key === " " || e.key === "Enter")) {
         e.preventDefault();
-        setRevealed(true);
+        reveal();
         return;
       }
       if (revealed && ["1", "2", "3", "4"].includes(e.key)) {
@@ -292,11 +324,18 @@ export function ReviewSession({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, revealed, rate, undo, canUndo, pending]);
+  }, [current, revealed, rate, reveal, undo, canUndo, pending]);
 
   // Fim da sessão: busca a próxima revisão do deck (omitida se indisponível).
   useEffect(() => {
     if (!done) return;
+    // Microcelebração: variante "resgate" quando a sessão zerou um backlog.
+    // Lido por ref para não reemitir a cada revisão contabilizada.
+    const reviewed = reviewedRef.current;
+    emitMotion("session:done", {
+      reviewed,
+      ...(reviewed >= TRIAGE_SIZE ? { variant: "rescue" as const } : {}),
+    });
     let cancelled = false;
     void nextReviewAtAction({ deckId }).then((result) => {
       if (!cancelled && result.ok) setNextDueAt(result.nextDueAt);
@@ -309,15 +348,17 @@ export function ReviewSession({
   if (!current) {
     return (
       <div className="flex min-h-dvh flex-col">
-        <SessionChrome deckName={deckName} counter={`${total} de ${total}`} progressPct={100} />
+        <SessionChrome deckName={deckName} done={total} remaining={null} progressPct={100} />
+        {/* Microcelebração (handoff §3 · 4h): as réguas IMPRIMEM em sequência,
+            depois o número CARIMBA. Sem confete — o alívio é editorial. */}
         <main className="flex flex-1 flex-col justify-center px-6 py-10">
           <p className={`text-muted-foreground ${KICKER}`}>Sessão concluída</p>
-          <h2 className="mt-3 text-[32px] font-semibold leading-[1.15] text-pretty sm:text-[40px]">
+          <h2 className="ms-stamp mt-3 text-[32px] font-semibold leading-[1.15] text-pretty sm:text-[40px]">
             {reviewedCount} {reviewedCount === 1 ? "revisão" : "revisões"} em{" "}
             {formatDuration(elapsedMs)}
           </h2>
           <dl className="mt-8 space-y-4 border-t-2 border-divider pt-6">
-            {RATINGS.map((r) => {
+            {RATINGS.map((r, i) => {
               const count = tally[r.value] ?? 0;
               const pct = reviewedCount > 0 ? (count / reviewedCount) * 100 : 0;
               return (
@@ -330,8 +371,13 @@ export function ReviewSession({
                   </div>
                   <div className="mt-1.5 h-[3px] bg-track">
                     <div
-                      className={`h-full ${r.value === 1 ? "bg-primary" : "bg-foreground"}`}
-                      style={{ width: `${pct}%` }}
+                      className={`ms-print h-full ${r.value === 1 ? "bg-primary" : "bg-foreground"}`}
+                      style={
+                        {
+                          width: `${pct}%`,
+                          "--ms-i": i,
+                        } as React.CSSProperties
+                      }
                     />
                   </div>
                 </div>
@@ -347,6 +393,9 @@ export function ReviewSession({
         <div className="px-6 pb-6">
           <Link
             href="/"
+            data-ms-press
+            data-ms-magnetic
+            data-ms-ripple="ink"
             className="flex min-h-14 w-full items-center justify-center border-2 border-divider px-6 text-[15px] font-semibold transition-colors duration-150 ease-out hover:bg-surface"
           >
             Voltar aos baralhos
@@ -383,14 +432,20 @@ export function ReviewSession({
     <div className="flex min-h-dvh flex-col">
       <SessionChrome
         deckName={deckName}
-        counter={`${reviewedCount} feitos · ${remaining} na fila`}
+        done={reviewedCount}
+        remaining={remaining}
+        ticking={pending}
         progressPct={total > 0 ? (reviewedCount / (reviewedCount + remaining)) * 100 : 0}
       />
 
       <main className="flex flex-1 items-center px-6 py-8">
+        {/* Objeto-herói: matéria (lastro translateZ), brilho especular seguindo
+            o cursor e tilt de 8° — o card é uma coisa, não um retângulo. */}
         <div
-          className={`review-card w-full font-semibold leading-[1.45] text-pretty ${
-            revealed ? "text-[21px] sm:text-2xl" : "text-2xl sm:text-[29px]"
+          key={card.cardId}
+          data-ms-tilt="8"
+          className={`review-card ms-matter ms-specular w-full p-5 font-semibold leading-[1.45] text-pretty ${
+            revealed ? "ms-flip-impulse text-[21px] sm:text-2xl" : "text-2xl sm:text-[29px]"
           }`}
         >
           <div className={`mb-3 flex items-center gap-2 ${KICKER}`}>
@@ -410,7 +465,10 @@ export function ReviewSession({
                 {renderBlocks(card.content.kind === "basic" ? card.content.front : [], renderOpts)}
               </div>
               {revealed && card.content.kind === "basic" && card.content.back.length > 0 ? (
-                <div className="note-back">{renderBlocks(card.content.back, renderOpts)}</div>
+                // Obturador: a resposta é descoberta por máscara, nunca por fade.
+                <div className="note-back ms-shutter">
+                  {renderBlocks(card.content.back, renderOpts)}
+                </div>
               ) : null}
             </>
           ) : (
@@ -429,7 +487,9 @@ export function ReviewSession({
         {!revealed ? (
           <button
             type="button"
-            onClick={() => setRevealed(true)}
+            onClick={() => reveal()}
+            data-ms-magnetic
+            data-ms-ripple="ink"
             className="min-h-14 w-full cursor-pointer bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary-hover"
           >
             Mostrar resposta<span className="hidden sm:inline"> (Espaço)</span>
@@ -446,6 +506,10 @@ export function ReviewSession({
                 type="button"
                 disabled={pending}
                 onClick={() => void rate(r.value)}
+                // Magnetismo cresce com a urgência: "Errei" atrai mais, porque
+                // o erro é o que pede atenção (handoff §7 · 4c).
+                data-ms-magnetic={r.magnetism}
+                data-ms-ripple={r.value === 1 ? "accent" : "ink"}
                 className="min-h-[56px] cursor-pointer bg-background p-4 text-left transition-colors duration-150 ease-out hover:bg-surface disabled:cursor-default disabled:opacity-50"
               >
                 <span
@@ -455,7 +519,8 @@ export function ReviewSession({
                 >
                   {r.label}
                 </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
+                {/* Preview de intervalo flipa ao ser revelado (contagem viva, 2a) */}
+                <span className="ms-flip mt-0.5 block text-xs text-muted-foreground">
                   {formatInterval(card.previewMs[i]!)}
                 </span>
               </button>
@@ -468,6 +533,7 @@ export function ReviewSession({
             type="button"
             onClick={() => void undo()}
             disabled={!canUndo || pending}
+            data-ms-ripple="danger"
             className="text-muted-foreground underline-offset-4 hover:underline disabled:opacity-40 disabled:hover:no-underline"
           >
             ↶ Desfazer<span className="hidden sm:inline"> (U)</span>
@@ -492,6 +558,7 @@ export function ReviewSession({
                   type="button"
                   role="menuitem"
                   onClick={() => void manage("bury")}
+                  data-ms-ripple="ink"
                   className="block w-full px-3 py-2 text-left hover:bg-surface"
                 >
                   Enterrar até amanhã
@@ -501,6 +568,7 @@ export function ReviewSession({
                     type="button"
                     role="menuitem"
                     onClick={() => void manage("bury", true)}
+                    data-ms-ripple="ink"
                     className="block w-full px-3 py-2 text-left hover:bg-surface"
                   >
                     Enterrar a nota inteira
@@ -510,6 +578,7 @@ export function ReviewSession({
                   type="button"
                   role="menuitem"
                   onClick={() => void manage("suspend")}
+                  data-ms-ripple="danger"
                   className="block w-full px-3 py-2 text-left text-primary-text hover:bg-surface"
                 >
                   Suspender card

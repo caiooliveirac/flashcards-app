@@ -54,6 +54,7 @@ export default async function PainelPage() {
         >
           <button
             type="submit"
+            data-ms-ripple="ink"
             className="min-h-9 border border-border px-3 text-sm transition-colors duration-150 ease-out hover:bg-surface"
           >
             Sair
