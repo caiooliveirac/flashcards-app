@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import { BRAND } from "@/lib/brand";
+import { AssistantMount } from "@/components/ai-assistant/assistant-mount";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -21,7 +22,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning className={archivo.variable}>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        {children}
+        <AssistantMount />
+      </body>
     </html>
   );
 }
