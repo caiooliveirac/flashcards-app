@@ -844,12 +844,13 @@ export function NoteEditorScreen({
             <TagInput tags={tags} onChange={setTags} suggestions={tagSuggestions} />
           </div>
 
-          <p
-            className="mt-8 cursor-default text-sm text-muted-foreground"
-            title="Assistente de criação com IA — em breve"
+          <a
+            href="/assistente"
+            className="mt-8 block text-sm text-muted-foreground underline-offset-4 hover:text-primary-text hover:underline"
+            title="Assistente de criação de cards com IA"
           >
-            ✳ Em breve o assistente vai sugerir cards a partir do seu texto.
-          </p>
+            ✳ Deixe o assistente sugerir cards a partir do seu texto.
+          </a>
         </aside>
       </div>
 

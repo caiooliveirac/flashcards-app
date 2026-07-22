@@ -13,8 +13,8 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 /**
- * Header enxuto do handoff: marca + navegação + chip "Assistente — em breve"
- * (inativo) + área do usuário à direita (passada como children: nome, sair, admin).
+ * Header enxuto do handoff: marca + navegação (inclui link "Assistente" da IA)
+ * + área do usuário à direita (passada como children: nome, sair, admin).
  * Telas de sessão de revisão NÃO usam este header (chrome mínimo próprio).
  */
 export function SiteHeader({
@@ -38,12 +38,13 @@ export function SiteHeader({
             <Link href="/painel" className="hover:text-primary-text">
               Painel
             </Link>
-            <span
-              className="cursor-default text-muted-foreground"
-              title="Assistente de criação com IA — em breve"
+            <Link
+              href="/assistente"
+              className="hover:text-primary-text"
+              title="Assistente de criação de cards com IA"
             >
-              ✳ Assistente — em breve
-            </span>
+              ✳ Assistente
+            </Link>
           </nav>
         ) : null}
         <div className="ml-auto flex items-center gap-4 text-sm">{children}</div>

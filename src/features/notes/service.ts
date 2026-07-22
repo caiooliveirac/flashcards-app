@@ -8,6 +8,7 @@ import {
   mediaAssets,
   mediaReferences,
   notes,
+  noteSourceType as noteSourceTypeEnum,
   noteTags,
   noteType as noteTypeEnum,
   tags,
@@ -35,6 +36,7 @@ import { validateTagName } from "@/features/tags/service";
 type UserRunner = <T>(userId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>;
 
 export type NoteType = (typeof noteTypeEnum.enumValues)[number];
+export type NoteSourceType = (typeof noteSourceTypeEnum.enumValues)[number];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -303,6 +305,8 @@ export interface CreateNoteInput {
   noteType: NoteType;
   content: unknown;
   tagNames?: string[];
+  /** Proveniência (Fase 5). Ausente = 'human' (default do schema). */
+  source?: { type: NoteSourceType; aiGenerationId?: string | null };
 }
 
 export async function createNote(
@@ -331,6 +335,8 @@ export async function createNote(
         contentJson: content,
         searchText,
         createdByUserId: userId,
+        sourceType: input.source?.type ?? "human",
+        aiGenerationId: input.source?.aiGenerationId ?? null,
       })
       .returning({ id: notes.id });
     if (!note) throw new Error("falha ao criar a nota");
@@ -360,7 +366,12 @@ export async function createNote(
       action: "note.create",
       entityType: "note",
       entityId: note.id,
-      metadata: { deckId: input.deckId, noteType: input.noteType, cardCount: cardIds.length },
+      metadata: {
+        deckId: input.deckId,
+        noteType: input.noteType,
+        cardCount: cardIds.length,
+        sourceType: input.source?.type ?? "human",
+      },
     });
 
     return { noteId: note.id, cardIds, cardCount: cardIds.length };
