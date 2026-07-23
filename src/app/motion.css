@@ -73,6 +73,20 @@ a:not([data-ms-press]):active {
   position: relative;
 }
 
+/* Hosts já posicionados não podem ser rebaixados para relative — este arquivo
+ * é carregado fora de @layer e venceria a utility (ex.: o FAB fixed do
+ * Preceptor sairia do lugar). Qualquer posicionamento serve de âncora ao
+ * .ms-ripple-layer, então devolvemos o da utility. */
+[data-ms-ripple].fixed {
+  position: fixed;
+}
+[data-ms-ripple].absolute {
+  position: absolute;
+}
+[data-ms-ripple].sticky {
+  position: sticky;
+}
+
 .ms-ripple-layer {
   position: absolute;
   inset: 0;

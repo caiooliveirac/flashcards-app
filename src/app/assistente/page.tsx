@@ -21,7 +21,7 @@ export default async function AssistentePage() {
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         {session.user.role === "admin" ? (
           <a href="/admin" className="hidden font-semibold underline-offset-4 hover:underline sm:inline">
             Admin

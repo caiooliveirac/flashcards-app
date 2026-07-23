@@ -282,6 +282,7 @@ export function AssistantPanel() {
         aria-label="Abrir assistente de dúvidas"
         data-ms-magnetic="6"
         data-ms-ripple="ink"
+        data-assistant-anchor
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-amber-800 text-white shadow-lg transition hover:bg-amber-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
       >
         {/* O ✳ nunca fica parado: em repouso ele respira, e reage aos eventos. */}
@@ -291,7 +292,10 @@ export function AssistantPanel() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex h-[min(70vh,560px)] w-[min(92vw,384px)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl">
+    <div
+      data-assistant-anchor
+      className="fixed bottom-5 right-5 z-50 flex h-[min(70vh,560px)] w-[min(92vw,384px)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl"
+    >
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2.5">
           <PreceptorGlyph state={glyphState} />

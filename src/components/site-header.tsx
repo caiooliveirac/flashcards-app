@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
+import { MobileMenu } from "@/components/mobile-menu";
 
 export function BrandMark({ className }: { className?: string }) {
   return (
@@ -20,9 +21,12 @@ export function BrandMark({ className }: { className?: string }) {
 export function SiteHeader({
   children,
   showNav = true,
+  isAdmin = false,
 }: {
   children?: React.ReactNode;
   showNav?: boolean;
+  /** Inclui o link "Admin" no menu mobile. */
+  isAdmin?: boolean;
 }) {
   return (
     <header className="border-b-2 border-divider">
@@ -47,7 +51,10 @@ export function SiteHeader({
             </Link>
           </nav>
         ) : null}
-        <div className="ml-auto flex items-center gap-4 text-sm">{children}</div>
+        <div className="ml-auto flex items-center gap-4 text-sm">
+          {children}
+          {showNav ? <MobileMenu isAdmin={isAdmin} /> : null}
+        </div>
       </div>
     </header>
   );
