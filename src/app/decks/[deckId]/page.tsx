@@ -149,7 +149,8 @@ export default async function DeckDetailPage({
       }));
     } catch (err) {
       rows = [];
-      searchFailure = err instanceof Error ? err.message : "falha na busca";
+      console.error("[deck search] falha na busca FTS", err);
+      searchFailure = "Não consegui buscar agora. Tente de novo em instantes.";
     }
   } else {
     rows = await listNotes(userId, { deckId, limit: 100 });

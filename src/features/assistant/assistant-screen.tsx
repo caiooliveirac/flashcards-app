@@ -235,6 +235,12 @@ export function AssistantScreen({
             </div>
           </div>
 
+          {/* Conteúdo clínico gerado por IA: confira antes de estudar. */}
+          <p className="text-xs text-muted-foreground">
+            Cards gerados por IA podem conter erros — confira o conteúdo com
+            diretrizes e fontes oficiais antes de estudar.
+          </p>
+
           <ul className="space-y-3">
             {items.map((item) => (
               <li key={item.id} className="border border-border p-4">
