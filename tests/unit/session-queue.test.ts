@@ -4,6 +4,7 @@ import {
   dropNote,
   initialQueue,
   LEARN_AHEAD_MS,
+  patchNoteContent,
   remainingCount,
   shouldRequeue,
   undoQueue,
@@ -188,5 +189,46 @@ describe("remainingCount", () => {
     };
     expect(remainingCount(q)).toBe(3);
     expect(remainingCount({ ...q, current: null })).toBe(2);
+  });
+});
+
+describe("patchNoteContent", () => {
+  const edited = {
+    schemaVersion: 1,
+    kind: "basic",
+    front: [{ type: "paragraph", content: [{ type: "text", text: "novo" }] }],
+    back: [],
+  } as unknown as SessionCard["content"];
+
+  it("atualiza o conteúdo do card na tela e dos irmãos da MESMA nota", () => {
+    const q: QueueState = {
+      main: [card("a2", "n"), card("b", "outra")],
+      learn: [{ card: card("c2", "n"), readyAt: NOW }],
+      current: card("a1", "n"),
+      presentation: 0,
+    };
+    const next = patchNoteContent(q, "n", edited);
+    expect(next.current?.content).toBe(edited);
+    expect(next.main[0]?.content).toBe(edited); // irmão a2 (nota n)
+    expect(next.learn[0]?.card.content).toBe(edited); // irmão c2 (nota n)
+    // Card de outra nota fica intacto.
+    expect(next.main[1]?.content).not.toBe(edited);
+  });
+
+  it("preserva a identidade das filas/relógio (só troca content)", () => {
+    const q: QueueState = {
+      main: [card("a", "n")],
+      learn: [{ card: card("b", "n"), readyAt: 42 }],
+      current: card("c", "n"),
+      presentation: 7,
+    };
+    const next = patchNoteContent(q, "n", edited);
+    expect(next.presentation).toBe(7);
+    expect(next.learn[0]?.readyAt).toBe(42);
+  });
+
+  it("sem card na tela não quebra", () => {
+    const q: QueueState = { main: [], learn: [], current: null, presentation: 0 };
+    expect(patchNoteContent(q, "n", edited).current).toBeNull();
   });
 });

@@ -12,10 +12,12 @@ import {
   suspendCardAction,
   undoReviewAction,
 } from "./actions";
+import { EditCardModal } from "./edit-card-modal";
 import {
   advanceQueue,
   dropNote,
   initialQueue,
+  patchNoteContent,
   remainingCount,
   shouldRequeue,
   undoQueue,
@@ -135,6 +137,7 @@ export function ReviewSession({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [nextDueAt, setNextDueAt] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // Última ação (undo de 1 nível, como o Anki).
   const lastActionRef = useRef<{ card: SessionCard; rating: number; durationMs: number } | null>(
@@ -281,6 +284,8 @@ export function ReviewSession({
   // Atalhos de teclado: espaço revela; 1-4 avalia; U desfaz.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Modal de edição aberto: o editor (Cmd+Enter etc.) manda no teclado.
+      if (editing) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
@@ -302,7 +307,7 @@ export function ReviewSession({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, revealed, rate, reveal, undo, canUndo, pending]);
+  }, [current, revealed, rate, reveal, undo, canUndo, pending, editing]);
 
   // Fim da sessão: busca a próxima revisão do deck (omitida se indisponível).
   useEffect(() => {
@@ -535,6 +540,18 @@ export function ReviewSession({
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setEditing(true);
+                  }}
+                  data-ms-ripple="ink"
+                  className="block w-full px-3 py-2 text-left hover:bg-surface"
+                >
+                  Editar card
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => void manage("bury")}
                   data-ms-ripple="ink"
                   className="block w-full px-3 py-2 text-left hover:bg-surface"
@@ -575,6 +592,21 @@ export function ReviewSession({
           </Link>
         </div>
       </div>
+
+      {editing ? (
+        <EditCardModal
+          noteId={card.noteId}
+          deckId={deckId}
+          deckName={deckName}
+          onClose={() => setEditing(false)}
+          onSaved={(content) => {
+            // Reflete a edição no card da tela (e nos irmãos ainda na fila) sem
+            // recarregar; o servidor já persistiu via updateNoteAction.
+            setQueue((q) => patchNoteContent(q, card.noteId, content));
+            setEditing(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
