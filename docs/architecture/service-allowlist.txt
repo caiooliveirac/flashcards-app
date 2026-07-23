@@ -3,6 +3,7 @@
 # O CI falha se `grep` em src/ encontrar uso fora desta lista.
 # Adicionar linha = decisão de segurança; justificar no PR.
 src/app/api/health/route.ts
+src/features/account/service.ts
 src/features/admin/service.ts
 src/lib/auth/bootstrap.ts
 src/lib/auth/index.ts
