@@ -146,7 +146,7 @@ function DeckCell({
       // que tem massa de cartas atrás e é nele que o accent significa algo.
       {...(urgent ? { "data-ms-spotlight": "always" } : {})}
       className={`flex flex-col p-5 sm:p-6 ${
-        urgent ? `ms-stack ${backlog ? "bg-urgent-strong" : "bg-urgent"}` : "bg-background"
+        urgent ? `ms-stack r-lift ${backlog ? "bg-urgent-strong" : "bg-urgent"}` : "bg-background"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -340,7 +340,7 @@ export default async function HomePage({
         {!hasDecks ? (
           <section className="py-10 sm:py-14">
             <p className={`${KICKER} text-primary-text`}>{dateKicker}</p>
-            <h1 className="mt-3 max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]">
+            <h1 className="r-display mt-3 max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]">
               A sua primeira edição começa com um baralho.
             </h1>
             <p className="mt-3 max-w-md text-sm text-muted-foreground sm:text-base">
@@ -371,14 +371,16 @@ export default async function HomePage({
           </section>
         ) : (
           <>
-            <section className="border-b-2 border-divider py-8 sm:py-12">
+            <section
+              className={`border-b-2 border-divider py-8 sm:py-12 ${urgentDeck ? "r-halo" : ""}`}
+            >
               <p className={`${KICKER} text-primary-text`}>{dateKicker}</p>
               {/* Headline entra palavra a palavra — stamp editorial (handoff §7 · 4e) */}
               <KineticText
                 as="h1"
                 text={headline}
                 by="word"
-                className="mt-3 block max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]"
+                className="r-display mt-3 block max-w-3xl text-balance text-[28px] font-extrabold leading-[1.08] sm:text-[48px] sm:leading-[1.05]"
               />
               <p className="mt-3 text-sm text-muted-foreground sm:text-base">{subline}</p>
               {urgentDeck ? (

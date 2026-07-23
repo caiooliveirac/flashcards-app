@@ -1,0 +1,21 @@
+/* ============================================================
+ * Refino 2026 · GRÃO — ruído fractal a baixíssima opacidade sobre todo o app.
+ * Aquece a paleta neutra e tira o ar "chapado de template". Estático
+ * (compatível com prefers-reduced-motion). pointer-events:none — nunca
+ * intercepta clique.
+ * Global. Gate: [data-r~="grain"] no <html>. Rollback: env, ou apague o arquivo.
+ * ============================================================ */
+html[data-r~="grain"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='rg'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23rg)'/%3E%3C/svg%3E");
+}
+html.dark[data-r~="grain"] body::after {
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}

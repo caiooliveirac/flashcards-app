@@ -1,0 +1,16 @@
+/* ============================================================
+ * Refino 2026 · PROFUNDIDADE EM CAMADAS — sombra ambiente suave sob a
+ * superfície-herói, SEM tocar na sombra dura Modernista (offset, sem blur).
+ * As duas convivem: a dura dá a assinatura, a ambiente dá o peso.
+ * Opt-in: classe .r-lift. Gate: [data-r~="depth"] no <html>.
+ * Token próprio (self-contained): apagar o arquivo remove efeito e token.
+ * ============================================================ */
+:root {
+  --r-shadow-ambient: rgba(32, 30, 29, 0.22);
+}
+.dark {
+  --r-shadow-ambient: rgba(0, 0, 0, 0.6);
+}
+html[data-r~="depth"] .r-lift {
+  box-shadow: 0 22px 44px -24px var(--r-shadow-ambient);
+}

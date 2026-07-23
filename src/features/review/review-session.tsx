@@ -431,9 +431,9 @@ export function ReviewSession({
             {card.isLeech ? (
               <span
                 className="border border-primary-text px-1.5 py-0.5 text-primary-text"
-                title={`Errado ${card.lapses}× — considere reformular ou suspender`}
+                title={`Você errou este card ${card.lapses}× — vale reformular ou suspender`}
               >
-                Leech
+                Card difícil
               </span>
             ) : null}
           </div>

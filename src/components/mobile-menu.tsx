@@ -73,6 +73,9 @@ export function MobileMenu({ isAdmin = false }: { isAdmin?: boolean }) {
           <Link href="/assistente" data-ms-ripple="ink" className={itemClass} onClick={close}>
             ✳ Assistente
           </Link>
+          <Link href="/conta" data-ms-ripple="ink" className={itemClass} onClick={close}>
+            Conta
+          </Link>
           {isAdmin ? (
             <Link href="/admin" data-ms-ripple="ink" className={itemClass} onClick={close}>
               Admin

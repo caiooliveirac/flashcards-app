@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
 import { MobileMenu } from "@/components/mobile-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function BrandMark({ className }: { className?: string }) {
   return (
@@ -49,10 +50,14 @@ export function SiteHeader({
             >
               ✳ Assistente
             </Link>
+            <Link href="/conta" className="hover:text-primary-text">
+              Conta
+            </Link>
           </nav>
         ) : null}
         <div className="ml-auto flex items-center gap-4 text-sm">
           {children}
+          <ThemeToggle />
           {showNav ? <MobileMenu isAdmin={isAdmin} /> : null}
         </div>
       </div>

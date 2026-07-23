@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "./motion.css";
 
+/* Refino visual 2026 — cada efeito é um arquivo isolado, gated por [data-r~="…"]
+ * (ver src/lib/refresh.ts). Comentar um @import desliga só aquele efeito. */
+@import "./refresh/type.css";
+@import "./refresh/depth.css";
+@import "./refresh/grain.css";
+@import "./refresh/halo.css";
+
 /*
  * Tokens do design system — redesign "Editorial Cognition" (handoff Claude Design).
  * Nomeação semântica mantida; valores trocados. Dark mode é tema próprio, não inversão.
