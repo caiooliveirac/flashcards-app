@@ -295,3 +295,16 @@ h4 {
 .note-callout-danger {
   border-left-color: var(--color-destructive);
 }
+
+/* ============================================================
+ * Assistente (Preceptor) × doca de ações mobile.
+ * A home mobile tem uma barra fixa (z-40) marcada com [data-mobile-dock];
+ * o FAB/painel do assistente (z-50, bottom-5) subiria por cima dela.
+ * Abaixo do breakpoint sm (40rem), quando a doca existe, o assistente
+ * sobe: altura da doca (~4,5rem) + respiro de 1rem + safe area.
+ * ============================================================ */
+@media (max-width: 39.9375rem) {
+  body:has([data-mobile-dock]) [data-assistant-anchor] {
+    bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+  }
+}

@@ -28,9 +28,9 @@ export default async function NewDeckPage({
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         {session.user.role === "admin" ? (
-          <Link href="/admin" className="font-semibold hover:text-primary-text">
+          <Link href="/admin" className="hidden font-semibold hover:text-primary-text sm:inline">
             Admin
           </Link>
         ) : null}
@@ -38,6 +38,7 @@ export default async function NewDeckPage({
           {session.user.email ?? session.user.name}
         </span>
         <form
+          className="hidden sm:block"
           action={async () => {
             "use server";
             await signOut({ redirectTo: "/login" });
