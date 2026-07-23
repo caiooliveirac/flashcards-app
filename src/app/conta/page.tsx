@@ -11,11 +11,12 @@ export default async function ContaPage() {
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         <span className="hidden text-muted-foreground sm:inline">
           {session.user.email ?? session.user.name}
         </span>
         <form
+          className="hidden sm:block"
           action={async () => {
             "use server";
             await signOut({ redirectTo: "/login" });

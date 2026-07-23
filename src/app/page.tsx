@@ -301,7 +301,7 @@ export default async function HomePage({
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         {session.user.role === "admin" ? (
           <a
             href="/admin"
@@ -463,8 +463,12 @@ export default async function HomePage({
         )}
       </main>
 
-      {/* Barra de ação fixa — apenas mobile */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-divider bg-background pb-[env(safe-area-inset-bottom)] sm:hidden">
+      {/* Barra de ação fixa — apenas mobile. data-mobile-dock: o FAB do
+          Preceptor lê esta marca para subir e não cobrir a barra (globals.css). */}
+      <div
+        data-mobile-dock
+        className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-divider bg-background pb-[env(safe-area-inset-bottom)] sm:hidden"
+      >
         <div className="flex gap-3 px-4 py-3">
           {urgentDeck ? (
             <>
