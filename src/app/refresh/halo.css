@@ -1,0 +1,27 @@
+/* ============================================================
+ * Refino 2026 · HALO DE ACCENT — brilho radial suave onde há urgência.
+ * Reusa a semântica do sistema: accent só onde significa algo. Use .r-halo
+ * APENAS em superfícies sem pseudo-elemento próprio (o ::before é do halo).
+ * Opt-in: classe .r-halo. Gate: [data-r~="halo"] no <html>.
+ * Rollback: tire "halo" da env, remova .r-halo, ou apague este arquivo.
+ * ============================================================ */
+html[data-r~="halo"] .r-halo {
+  position: relative;
+}
+html[data-r~="halo"] .r-halo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    62% 82% at 90% 0%,
+    color-mix(in srgb, var(--primary) 20%, transparent),
+    transparent 70%
+  );
+}
+/* Conteúdo acima do halo (o halo é a camada 0 dentro da superfície). */
+html[data-r~="halo"] .r-halo > * {
+  position: relative;
+  z-index: 1;
+}
