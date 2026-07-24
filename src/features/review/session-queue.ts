@@ -144,6 +144,27 @@ export function dropNote(state: QueueState, noteId: string): QueueState {
   };
 }
 
+/**
+ * Aplica o conteúdo recém-editado a TODOS os cards de uma nota na sessão (o da
+ * tela e os que ainda virão). O conteúdo é da nota, compartilhado pelos irmãos,
+ * então todos são atualizados. Usado pelo modal "Editar card": o servidor já
+ * persistiu; isto reflete a edição na hora sem recarregar a página.
+ */
+export function patchNoteContent(
+  state: QueueState,
+  noteId: string,
+  content: SessionCard["content"],
+): QueueState {
+  const patch = (c: SessionCard): SessionCard =>
+    c.noteId === noteId ? { ...c, content } : c;
+  return {
+    ...state,
+    main: state.main.map(patch),
+    learn: state.learn.map((l) => ({ ...l, card: patch(l.card) })),
+    current: state.current ? patch(state.current) : null,
+  };
+}
+
 /** Quantos cards ainda serão vistos, contando o da tela. */
 export function remainingCount(state: QueueState): number {
   return state.main.length + state.learn.length + (state.current ? 1 : 0);

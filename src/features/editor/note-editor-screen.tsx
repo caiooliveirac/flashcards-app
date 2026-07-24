@@ -28,7 +28,7 @@ import {
   updateNoteAction,
 } from "@/features/notes/actions";
 import { clozePreviewCards } from "@/lib/content/derive";
-import type { BasicNoteContent } from "@/lib/content/schema";
+import type { BasicNoteContent, NoteContent } from "@/lib/content/schema";
 import { collectGroupKeysFromDoc } from "@/lib/editor/cloze-node";
 import { editorExtensions } from "@/lib/editor/extensions";
 import type { NotePmDocs } from "@/lib/editor/parse";
@@ -73,6 +73,15 @@ export interface NoteEditorScreenProps {
   backHref?: string;
   /** Presente = modo edição (tabs escondidas, tipo imutável). */
   editNote?: EditNoteProps;
+  /**
+   * Modo embutido (modal "Editar card" da revisão): ao salvar a edição, em vez
+   * de navegar para o baralho, devolve o conteúdo salvo por callback para quem
+   * embute a tela atualizar o card na hora. Também esconde o link do assistente
+   * e mostra o botão "Cancelar". Só faz sentido junto de `editNote`.
+   */
+  onEditSaved?: (content: NoteContent, cardCount: number) => void;
+  /** Botão "Cancelar" no rodapé embutido (fecha o modal sem salvar). */
+  onCancel?: () => void;
 }
 
 interface SelectedCloze {
@@ -142,9 +151,12 @@ export function NoteEditorScreen({
   tagSuggestions,
   backHref,
   editNote,
+  onEditSaved,
+  onCancel,
 }: NoteEditorScreenProps) {
   const router = useRouter();
   const isEdit = editNote !== undefined;
+  const embedded = onEditSaved !== undefined;
   const [tab, setTab] = useState<TabId>(editNote?.noteType === "cloze" ? "cloze" : "basic");
   const currentKind: NoteKind = isEdit
     ? editNote.noteType
@@ -499,6 +511,12 @@ export function NoteEditorScreen({
       if (!res.ok) {
         setSaving(false);
         push({ kind: "error", message: res.error });
+        return;
+      }
+      // Embutido (modal da revisão): não navega — devolve o conteúdo salvo para
+      // quem embute atualizar o card na tela e fechar o modal.
+      if (onEditSaved) {
+        onEditSaved(content as NoteContent, res.cardCount);
         return;
       }
       const notice = `Nota atualizada — ${plural(res.cardCount, "card ativo", "cards ativos")}`;
@@ -863,13 +881,15 @@ export function NoteEditorScreen({
             <TagInput tags={tags} onChange={setTags} suggestions={tagSuggestions} />
           </div>
 
-          <a
-            href="/assistente"
-            className="mt-8 block text-sm text-muted-foreground underline-offset-4 hover:text-primary-text hover:underline"
-            title="Assistente de criação de cards com IA"
-          >
-            ✳ Deixe o assistente sugerir cards a partir do seu texto.
-          </a>
+          {!embedded ? (
+            <a
+              href="/assistente"
+              className="mt-8 block text-sm text-muted-foreground underline-offset-4 hover:text-primary-text hover:underline"
+              title="Assistente de criação de cards com IA"
+            >
+              ✳ Deixe o assistente sugerir cards a partir do seu texto.
+            </a>
+          ) : null}
         </aside>
       </div>
 
@@ -909,6 +929,16 @@ export function NoteEditorScreen({
           >
             {saving ? "Salvando…" : isEdit ? "Salvar alterações" : "Salvar e continuar"}
           </button>
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving}
+              className="min-h-12 px-6 text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+          ) : null}
           <kbd className="hidden text-xs text-muted-foreground sm:inline">Cmd/Ctrl+Enter</kbd>
           <span className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
             {pendingUploads > 0 ? (

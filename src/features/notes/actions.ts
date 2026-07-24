@@ -6,11 +6,15 @@ import {
   createNote,
   deleteNote,
   duplicateNote,
+  getNoteForEdit,
   moveNote,
   restoreNote,
   updateNote,
 } from "@/features/notes/service";
+import { listTags } from "@/features/tags/service";
 import { auth } from "@/lib/auth";
+import { noteContentToPmDocs, type NotePmDocs } from "@/lib/editor/parse";
+import { mediaMaxBytes } from "@/lib/storage/types";
 
 /**
  * Actions finas sobre o serviço de notas (fluxos §13.1-2). São chamadas
@@ -171,6 +175,53 @@ export async function moveNoteAction(input: {
     await moveNote(userId, parsed.data);
     revalidateNoteViews();
     return { ok: true };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+export type NoteEditorData = {
+  noteType: "basic" | "cloze";
+  initialDocs: NotePmDocs;
+  initialTags: string[];
+  clozeGroupKeys: string[];
+  maxBytes: number;
+  tagSuggestions: string[];
+};
+
+export type NoteEditorDataActionResult =
+  | { ok: true; data: NoteEditorData }
+  | ActionFailure;
+
+/**
+ * Dados para abrir o editor de uma nota FORA da rota /notes/[id]/edit — hoje só
+ * o modal "Editar card" da sessão de revisão. Empacota o que o server component
+ * da página de edição monta (docs PM + tags + sugestões + limite de mídia) para
+ * o modal, que é client, poder carregar sob demanda ao abrir. userId da sessão.
+ */
+export async function getNoteEditorDataAction(input: {
+  noteId: string;
+}): Promise<NoteEditorDataActionResult> {
+  const userId = await sessionUserId();
+  if (!userId) return { ok: false, error: "não autenticado — recarregue a página" };
+  const parsed = noteIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  try {
+    const [note, tags] = await Promise.all([
+      getNoteForEdit(userId, parsed.data.noteId),
+      listTags(userId),
+    ]);
+    return {
+      ok: true,
+      data: {
+        noteType: note.noteType,
+        initialDocs: noteContentToPmDocs(note.content),
+        initialTags: note.tagNames,
+        clozeGroupKeys: note.clozeGroupKeys,
+        maxBytes: mediaMaxBytes(),
+        tagSuggestions: tags.map((t) => t.name),
+      },
+    };
   } catch (err) {
     return failure(err);
   }
