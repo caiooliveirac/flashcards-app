@@ -17,4 +17,6 @@ export interface SessionCard {
   previewMs: [number, number, number, number];
   lapses: number;
   isLeech: boolean;
+  /** Texto plano do card para o Preceptor (explicar/reformular). */
+  aiText: string;
 }

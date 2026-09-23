@@ -7,6 +7,8 @@ import { auth } from "@/lib/auth";
 import {
   AssistantDisabledError,
   acceptSuggestion,
+  proposeLeechRewrite,
+  replaceLeech,
   suggestForUser,
   type AssistantSuggestion,
 } from "@/features/assistant/service";
@@ -107,6 +109,64 @@ export async function acceptSuggestionAction(input: {
     });
     revalidatePath("/", "layout");
     return { ok: true, noteId: result.noteId, cardCount: result.cardCount };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "erro ao salvar" };
+  }
+}
+
+export type LeechProposalResult =
+  | { ok: true; diagnosis: string; suggestions: AssistantSuggestion[] }
+  | { ok: false; message: string };
+
+/** Diagnostica o card difícil e propõe a reescrita (nada é gravado). */
+export async function proposeLeechRewriteAction(input: {
+  cardId: string;
+}): Promise<LeechProposalResult> {
+  const userId = await sessionUserId();
+  if (!userId) return { ok: false, message: "Sessão expirada — recarregue a página." };
+  const parsed = z.object({ cardId: z.uuid() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "card inválido" };
+  try {
+    const r = await proposeLeechRewrite(userId, parsed.data.cardId);
+    return { ok: true, diagnosis: r.diagnosis, suggestions: r.suggestions };
+  } catch (err) {
+    if (err instanceof AssistantDisabledError) {
+      return { ok: false, message: "O Preceptor está indisponível no momento." };
+    }
+    console.warn("[assistant] falha ao reformular leech:", err instanceof Error ? err.message : err);
+    return { ok: false, message: "Não consegui reformular agora. Tente de novo." };
+  }
+}
+
+const replaceLeechSchema = z.object({
+  cardId: z.uuid(),
+  suggestions: z
+    .array(
+      z.object({
+        noteType: z.enum(["basic", "cloze"]),
+        content: z.unknown(),
+        tagNames: z.array(z.string().max(200)).max(50).optional(),
+      }),
+    )
+    .min(1)
+    .max(3),
+});
+
+export type ReplaceLeechResult = { ok: true; created: number } | { ok: false; message: string };
+
+/** Cria os cards novos no baralho do card difícil e suspende o antigo. */
+export async function replaceLeechAction(input: {
+  cardId: string;
+  suggestions: Array<{ noteType: "basic" | "cloze"; content: unknown; tagNames?: string[] }>;
+}): Promise<ReplaceLeechResult> {
+  const userId = await sessionUserId();
+  if (!userId) return { ok: false, message: "Sessão expirada — recarregue a página." };
+  const parsed = replaceLeechSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "dados inválidos" };
+  try {
+    const r = await replaceLeech(userId, parsed.data);
+    revalidatePath("/", "layout");
+    return { ok: true, created: r.created };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "erro ao salvar" };
   }

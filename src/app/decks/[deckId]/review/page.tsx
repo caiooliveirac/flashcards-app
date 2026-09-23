@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getReviewQueue, startStudySession } from "@/features/review/service";
 import { ReviewSession, type SessionCard } from "@/features/review/review-session";
+import { isAiEnabled } from "@/lib/ai/config";
 import { auth } from "@/lib/auth";
 
 export default async function ReviewPage({
@@ -73,6 +74,7 @@ export default async function ReviewPage({
           deckName={queue.deckName}
           cards={queue.cards as SessionCard[]}
           studySessionId={studySessionId}
+          aiEnabled={isAiEnabled()}
         />
       )}
     </div>

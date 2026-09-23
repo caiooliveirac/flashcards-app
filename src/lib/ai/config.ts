@@ -6,7 +6,7 @@
  */
 
 /** Modelo padrão. Sobrescrevível por env para trocar custo/latência sem deploy. */
-export const AI_MODEL = process.env.FLASHCARDS_AI_MODEL?.trim() || "claude-opus-4-8";
+export const AI_MODEL = process.env.FLASHCARDS_AI_MODEL?.trim() || "claude-opus-5-5";
 
 /** Recurso ligado só quando há chave. Verificado no servidor, nunca no client. */
 export function isAiEnabled(): boolean {

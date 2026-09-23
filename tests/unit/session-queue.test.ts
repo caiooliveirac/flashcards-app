@@ -22,6 +22,7 @@ function card(cardId: string, noteId = cardId): SessionCard {
     previewMs: [60_000, 360_000, 600_000, 691_200_000],
     lapses: 0,
     isLeech: false,
+    aiText: "",
   };
 }
 

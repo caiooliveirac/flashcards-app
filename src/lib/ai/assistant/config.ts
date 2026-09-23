@@ -28,8 +28,10 @@ export interface TierConfig {
 const env = (k: string): string | undefined => process.env[k]?.trim() || undefined;
 
 /**
- * fast=Haiku 4.5 ($1/$5), mid=Sonnet 4.6 ($3/$15), deep=Opus 4.8 ($5/$25).
+ * fast=Haiku 4.5 ($1/$5), mid=Sonnet 5 ($2/$10), deep=Opus 5.5 ($4/$20).
  * Haiku 4.5 não aceita `effort` nem thinking adaptativo — por isso ficam vazios.
+ * Opus 5.5 recusa thinking desligado (400) e tem effort default `medium` —
+ * por isso o deep declara os dois explicitamente.
  */
 export const TIERS: Record<AssistantTier, TierConfig> = {
   fast: {
@@ -42,23 +44,23 @@ export const TIERS: Record<AssistantTier, TierConfig> = {
   },
   mid: {
     tier: "mid",
-    model: env("FLASHCARDS_AI_MID_MODEL") ?? "claude-sonnet-4-6",
+    model: env("FLASHCARDS_AI_MID_MODEL") ?? "claude-sonnet-5",
     label: "Equilibrado",
     maxTokens: 1536,
     thinking: { type: "disabled" },
     effort: "low",
-    priceInPerM: 3,
-    priceOutPerM: 15,
+    priceInPerM: 2,
+    priceOutPerM: 10,
   },
   deep: {
     tier: "deep",
-    model: env("FLASHCARDS_AI_DEEP_MODEL") ?? "claude-opus-4-8",
+    model: env("FLASHCARDS_AI_DEEP_MODEL") ?? "claude-opus-5-5",
     label: "Aprofundado",
     maxTokens: 3072,
     thinking: { type: "adaptive" },
     effort: "high",
-    priceInPerM: 5,
-    priceOutPerM: 25,
+    priceInPerM: 4,
+    priceOutPerM: 20,
   },
 };
 

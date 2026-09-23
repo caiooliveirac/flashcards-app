@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { requestExplain } from "@/components/ai-assistant/explain";
 import { LiveCount } from "@/lib/motion/components";
 import { emitMotion } from "@/lib/motion/events";
 import { renderBlocks, renderNoteContent } from "@/lib/render";
@@ -12,6 +13,7 @@ import {
   suspendCardAction,
   undoReviewAction,
 } from "./actions";
+import { LeechFix } from "./leech-fix";
 import {
   advanceQueue,
   dropNote,
@@ -116,11 +118,14 @@ export function ReviewSession({
   deckName,
   cards,
   studySessionId,
+  aiEnabled = false,
 }: {
   deckId: string;
   deckName: string;
   cards: SessionCard[];
   studySessionId?: string;
+  /** Preceptor disponível (chave de IA configurada) — liga Explicar/Reformular. */
+  aiEnabled?: boolean;
 }) {
   // Fila única com transição pura (session-queue.ts). Antes eram três estados
   // atualizados em updaters aninhados, o que tornava a transição imprevisível.
@@ -135,6 +140,7 @@ export function ReviewSession({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [nextDueAt, setNextDueAt] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Última ação (undo de 1 nível, como o Anki).
   const lastActionRef = useRef<{ card: SessionCard; rating: number; durationMs: number } | null>(
@@ -189,6 +195,7 @@ export function ReviewSession({
       if (!card || pending) return;
       setPending(true);
       setError(null);
+      setNotice(null);
       const durationMs = Math.min(Date.now() - shownAtRef.current, 3_600_000);
       const result = await submitReviewAction({
         cardId: card.cardId,
@@ -276,6 +283,19 @@ export function ReviewSession({
       advance();
     },
     [current, pending, advance],
+  );
+
+  /** Leech trocado por cards novos: o antigo já foi suspenso no servidor. */
+  const onLeechReplaced = useCallback(
+    (created: number) => {
+      lastActionRef.current = null;
+      setCanUndo(false);
+      setNotice(
+        `${created} ${created === 1 ? "card novo criado" : "cards novos criados"} no baralho — o antigo foi suspenso.`,
+      );
+      advance();
+    },
+    [advance],
   );
 
   // Atalhos de teclado: espaço revela; 1-4 avalia; U desfaz.
@@ -456,6 +476,17 @@ export function ReviewSession({
       </main>
 
       <div className="px-6 pb-6">
+        {notice ? (
+          <p aria-live="polite" className="mb-3 border-2 border-divider px-3 py-2 text-sm">
+            {notice}
+          </p>
+        ) : null}
+        {aiEnabled && card.isLeech && revealed ? (
+          // Depois de revelar: a proposta mostra respostas, não pode vazar antes.
+          <div className="mb-3">
+            <LeechFix key={card.cardId} cardId={card.cardId} lapses={card.lapses} onReplaced={onLeechReplaced} />
+          </div>
+        ) : null}
         {error ? (
           <p role="alert" className="mb-3 border-2 border-divider px-3 py-2 text-sm text-primary-text">
             {error} — tente de novo.
@@ -516,6 +547,19 @@ export function ReviewSession({
           >
             ↶ Desfazer<span className="hidden sm:inline"> (U)</span>
           </button>
+
+          {aiEnabled && revealed ? (
+            <button
+              type="button"
+              onClick={() =>
+                requestExplain({ deckName, cardText: card.aiText, lapses: card.lapses })
+              }
+              data-ms-ripple="ink"
+              className="font-semibold text-primary-text underline-offset-4 hover:underline"
+            >
+              ✳ Explicar
+            </button>
+          ) : null}
 
           <div className="relative">
             <button

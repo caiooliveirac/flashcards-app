@@ -14,7 +14,7 @@ import {
   studySessions,
   userPreferences,
 } from "@/db/schema";
-import type { NoteContent } from "@/lib/content";
+import { cardTextForAi, type NoteContent } from "@/lib/content";
 import {
   nextStudyDayStart,
   studyDayKey,
@@ -170,6 +170,8 @@ export interface ReviewQueueCard {
   /** lapses acumulados — leech quando ≥ limiar (aceite F3, ver LEECH_THRESHOLD). */
   lapses: number;
   isLeech: boolean;
+  /** Texto plano do card para o Preceptor (explicar/reformular). */
+  aiText: string;
 }
 
 export interface ReviewQueue {
@@ -369,6 +371,7 @@ export async function getReviewQueue(
         previewMs: previewMs(scheduler, before, now),
         lapses: r.lapses ?? 0,
         isLeech: (r.lapses ?? 0) >= LEECH_THRESHOLD,
+        aiText: cardTextForAi(r.contentJson as NoteContent, r.clozeGroupKey),
       };
     };
 

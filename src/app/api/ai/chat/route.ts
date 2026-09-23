@@ -27,6 +27,7 @@ const bodySchema = z.object({
     .object({
       deckName: z.string().max(200).optional(),
       cardText: z.string().max(20000).optional(),
+      lapses: z.number().int().min(0).max(10000).optional(),
     })
     .optional(),
 });
