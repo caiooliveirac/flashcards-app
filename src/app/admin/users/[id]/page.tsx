@@ -82,7 +82,14 @@ export default async function AdminUserPage({
               <tbody>
                 {content.decks.map((d) => (
                   <tr key={d.id} className="border-b border-border">
-                    <td className="px-3 py-3 font-semibold">{d.name}</td>
+                    <td className="px-3 py-3 font-semibold">
+                      <Link
+                        href={`/admin/users/${content.user.id}/decks/${d.id}`}
+                        className="text-primary-text underline-offset-4 hover:underline"
+                      >
+                        {d.name}
+                      </Link>
+                    </td>
                     <td className="px-3 py-3">{d.status}</td>
                     <td className="px-3 py-3">{d.noteCount}</td>
                     <td className="px-3 py-3">{d.cardCount}</td>
