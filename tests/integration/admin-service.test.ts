@@ -1,6 +1,12 @@
 import { desc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getUserFlashcards, listUsers, setUserPassword } from "@/features/admin/service";
+import {
+  getUserDeckNotes,
+  getUserFlashcards,
+  listUsers,
+  setUserPassword,
+} from "@/features/admin/service";
+import { createNote } from "@/features/notes/service";
 import { auditLogs, decks, users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth/password";
 import { createTestDatabase, type TestDatabase } from "./helpers/testdb";
@@ -79,5 +85,50 @@ describe("admin service (backoffice auditado)", () => {
     );
     expect(audit[0]?.actorUserId).toBe(adminId);
     expect(audit[0]?.entityId).toBe(alvoId);
+  });
+
+  it("getUserDeckNotes mostra o conteúdo do baralho do alvo e audita", async () => {
+    const [deck] = await db.clients.withUserTransaction(alvoId, (tx) =>
+      tx.select().from(decks).where(eq(decks.ownerUserId, alvoId)),
+    );
+    await createNote(
+      alvoId,
+      {
+        deckId: deck!.id,
+        noteType: "basic",
+        content: {
+          schemaVersion: 1,
+          kind: "basic",
+          front: [{ type: "paragraph", content: [{ type: "text", text: "PA 72×40?" }] }],
+          back: [{ type: "paragraph", content: [{ type: "text", text: "Noradrenalina" }] }],
+        },
+      },
+      db.clients.withUserTransaction,
+    );
+
+    const content = await getUserDeckNotes(adminId, alvoId, deck!.id, db.clients.withServiceTransaction);
+    expect(content.deck.name).toBe("Cardio");
+    expect(content.notes).toHaveLength(1);
+    expect(content.notes[0]!.content.kind).toBe("basic");
+
+    const audit = await db.clients.withServiceTransaction((tx) =>
+      tx
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, "admin.view_deck_notes"))
+        .orderBy(desc(auditLogs.id))
+        .limit(1),
+    );
+    expect(audit[0]?.actorUserId).toBe(adminId);
+    expect(audit[0]?.entityId).toBe(deck!.id);
+  });
+
+  it("getUserDeckNotes recusa baralho que não é do usuário da URL", async () => {
+    const [deck] = await db.clients.withUserTransaction(alvoId, (tx) =>
+      tx.select().from(decks).where(eq(decks.ownerUserId, alvoId)),
+    );
+    await expect(
+      getUserDeckNotes(adminId, adminId, deck!.id, db.clients.withServiceTransaction),
+    ).rejects.toThrow(/baralho não encontrado/);
   });
 });
