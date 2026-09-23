@@ -90,15 +90,22 @@ function canonicalizeBlocks(
 /**
  * Linearização para busca textual (FTS): cloze REVELADO, hints ignorados,
  * alt de imagens e latex de math/formula incluídos, codeBlock incluído.
+ * `markGroup` (só para o contexto da IA) envolve as ocultações desse grupo em
+ * [[...]] para indicar qual trecho o card cobra.
  */
-function searchTextOfBlocks(blocks: Array<Block<Inline | InlineNoCloze>>): string {
+function searchTextOfBlocks(
+  blocks: Array<Block<Inline | InlineNoCloze>>,
+  markGroup?: string,
+): string {
   const parts: string[] = [];
   const walkInlines = (inlines: Array<Inline | InlineNoCloze>): string => {
     let out = "";
     for (const i of inlines) {
       if (i.type === "text") out += i.text;
       else if (i.type === "math") out += i.latex;
-      else if (i.type === "cloze") out += clozeInnerText(i);
+      else if (i.type === "cloze") {
+        out += i.groupKey === markGroup ? `[[${clozeInnerText(i)}]]` : clozeInnerText(i);
+      }
     }
     return out;
   };
@@ -131,6 +138,20 @@ export function deriveSearchText(content: NoteContent): string {
     );
   }
   return searchTextOfBlocks(content.text);
+}
+
+/**
+ * Texto do card para a IA (explicar/reformular): basic vira "Frente/Verso";
+ * cloze vem revelado com o trecho cobrado por ESTE card entre [[...]].
+ */
+export function cardTextForAi(content: NoteContent, clozeGroupKey: string | null): string {
+  if (content.kind === "basic") {
+    return `Frente: ${searchTextOfBlocks(content.front)}\nVerso: ${searchTextOfBlocks(content.back)}`;
+  }
+  return `Cloze (o trecho entre [[ ]] é o que o card cobra): ${searchTextOfBlocks(
+    content.text,
+    clozeGroupKey ?? undefined,
+  )}`;
 }
 
 /** groupKeys distintos na ordem de PRIMEIRA aparição no documento. */

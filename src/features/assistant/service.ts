@@ -1,9 +1,15 @@
+import { and, eq, isNull } from "drizzle-orm";
+import type { Tx } from "@/db/client";
+import { withUserTransaction } from "@/db/runtime";
+import { cardProgress, cards, notes } from "@/db/schema";
 import { suggestCards, type PriorCard, type SuggestMode } from "@/lib/ai/card-suggester";
 import { isAiEnabled } from "@/lib/ai/config";
+import { rewriteLeech } from "@/lib/ai/leech-rewriter";
 import type { SuggestedCard } from "@/lib/ai/suggestion-schema";
 import { convertSuggestion } from "@/lib/ai/to-note-content";
-import type { NoteContent } from "@/lib/content";
+import { cardTextForAi, type NoteContent } from "@/lib/content";
 import { createNote, type NoteType } from "@/features/notes/service";
+import { suspendCard } from "@/features/review/manage";
 
 /**
  * Serviço do Assistente de criação de cards (Fase 5). Orquestra o suggester e
@@ -115,4 +121,92 @@ export async function acceptSuggestion(
     source: { type: "ai" },
   });
   return { noteId: result.noteId, cardCount: result.cardCount };
+}
+
+type UserRunner = <T>(userId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>;
+
+/** Card ativo do usuário com o que a IA precisa (texto, lapses) e o baralho da nota. */
+async function loadCardForAi(
+  userId: string,
+  cardId: string,
+  runUser: UserRunner,
+): Promise<{ deckId: string; cardText: string; lapses: number }> {
+  const row = await runUser(userId, async (tx) => {
+    const [r] = await tx
+      .select({
+        deckId: notes.deckId,
+        contentJson: notes.contentJson,
+        clozeGroupKey: cards.clozeGroupKey,
+        lapses: cardProgress.lapses,
+      })
+      .from(cards)
+      .innerJoin(notes, eq(notes.id, cards.noteId))
+      .leftJoin(
+        cardProgress,
+        and(eq(cardProgress.cardId, cards.id), eq(cardProgress.userId, userId)),
+      )
+      .where(
+        and(
+          eq(cards.id, cardId),
+          eq(cards.ownerUserId, userId),
+          eq(cards.status, "active"),
+          isNull(notes.deletedAt),
+        ),
+      )
+      .limit(1);
+    return r ?? null;
+  });
+  if (!row) throw new Error("card não encontrado");
+  return {
+    deckId: row.deckId,
+    cardText: cardTextForAi(row.contentJson as NoteContent, row.clozeGroupKey),
+    lapses: row.lapses ?? 0,
+  };
+}
+
+export interface LeechProposal {
+  diagnosis: string;
+  suggestions: AssistantSuggestion[];
+}
+
+/** Diagnóstico + reescrita de um card difícil. Só propõe; nada é gravado. */
+export async function proposeLeechRewrite(
+  userId: string,
+  cardId: string,
+): Promise<LeechProposal> {
+  if (!isAiEnabled()) throw new AssistantDisabledError();
+  const card = await loadCardForAi(userId, cardId, withUserTransaction);
+  const { diagnosis, cards: converted } = await rewriteLeech({
+    cardText: card.cardText,
+    lapses: card.lapses,
+  });
+  return {
+    diagnosis,
+    suggestions: converted.map((c) => ({
+      noteType: c.noteType,
+      content: c.content,
+      tags: c.tags,
+      preview: c.preview,
+    })),
+  };
+}
+
+/**
+ * Troca o card difícil pelos novos: cria as notas (sourceType='ai') no MESMO
+ * baralho — tirado do banco, nunca do cliente — e só então suspende o antigo.
+ * O antigo não é apagado: histórico e progresso ficam, dá para reativar.
+ */
+export async function replaceLeech(
+  userId: string,
+  input: { cardId: string; suggestions: Array<{ noteType: NoteType; content: unknown; tagNames?: string[] }> },
+  runUser: UserRunner = withUserTransaction,
+): Promise<{ created: number }> {
+  const { deckId } = await loadCardForAi(userId, input.cardId, runUser);
+  let created = 0;
+  for (const s of input.suggestions) {
+    const r = await createNote(userId, { deckId, ...s, source: { type: "ai" } }, runUser);
+    created += r.cardCount;
+  }
+  await suspendCard(userId, { cardId: input.cardId }, runUser);
+  return { created };
 }

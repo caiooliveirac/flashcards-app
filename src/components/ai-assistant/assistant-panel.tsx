@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emitMotion } from "@/lib/motion/events";
 import { PreceptorGlyph, type GlyphState } from "@/lib/motion/preceptor-glyph";
+import { EXPLAIN_EVENT, type CardContext } from "./explain";
 
 /**
  * Painel do assistente (tira-dúvidas). Botão flutuante → chat com streaming SSE.
@@ -67,6 +68,8 @@ export function AssistantPanel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [decks, setDecks] = useState<DeckOption[] | null>(null);
+  /** Card em foco (vindo de "Explicar"): segue como contexto nas perguntas seguintes. */
+  const [cardCtx, setCardCtx] = useState<CardContext | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,7 +97,7 @@ export function AssistantPanel() {
 
   /** Envia `history` ao backend e faz streaming da resposta (SSE sobre fetch). */
   const run = useCallback(
-    async (history: ChatMessage[], forceDeep: boolean) => {
+    async (history: ChatMessage[], forceDeep: boolean, context: CardContext | null) => {
       setBusy(true);
       setNotice(null);
       // placeholder da resposta que vai sendo preenchida pelos deltas
@@ -107,6 +110,7 @@ export function AssistantPanel() {
           body: JSON.stringify({
             messages: history.map((m) => ({ role: m.role, content: m.content })),
             forceDeep,
+            ...(context ? { context } : {}),
           }),
         });
 
@@ -184,8 +188,8 @@ export function AssistantPanel() {
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    run([...messages, { role: "user", content: text }], false);
-  }, [input, busy, messages, run]);
+    run([...messages, { role: "user", content: text }], false, cardCtx);
+  }, [input, busy, messages, run, cardCtx]);
 
   /** Reenvia a última pergunta do usuário forçando o perfil aprofundado. */
   const deepen = useCallback(() => {
@@ -198,8 +202,25 @@ export function AssistantPanel() {
       }
     }
     if (lastUserIdx < 0) return;
-    run(messages.slice(0, lastUserIdx + 1), true);
-  }, [busy, messages, run]);
+    run(messages.slice(0, lastUserIdx + 1), true, cardCtx);
+  }, [busy, messages, run, cardCtx]);
+
+  // "Explicar este card" (revisão): abre o painel numa conversa nova sobre o card.
+  const busyRef = useRef(false);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+  useEffect(() => {
+    const onExplain = (e: Event) => {
+      const ctx = (e as CustomEvent<CardContext>).detail;
+      if (!ctx?.cardText || busyRef.current) return;
+      setOpen(true);
+      setCardCtx(ctx);
+      void run([{ role: "user", content: "Explique este card." }], false, ctx);
+    };
+    window.addEventListener(EXPLAIN_EVENT, onExplain);
+    return () => window.removeEventListener(EXPLAIN_EVENT, onExplain);
+  }, [run]);
 
   /** Confirma e cria o card proposto no baralho escolhido (§9.2). */
   const createCard = useCallback(
@@ -316,6 +337,22 @@ export function AssistantPanel() {
       </header>
 
       {busy ? <div className="ms-tick h-[2px] bg-track" aria-hidden="true" /> : null}
+
+      {cardCtx ? (
+        <div className="flex items-center gap-2 border-b border-stone-200 bg-amber-50/70 px-4 py-1.5 text-xs text-amber-900">
+          <span className="min-w-0 flex-1 truncate">
+            Sobre o card: {cardCtx.cardText.replace(/^(Frente|Cloze[^:]*): /, "")}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCardCtx(null)}
+            aria-label="Parar de falar sobre este card"
+            className="shrink-0 rounded px-1 text-amber-700 hover:bg-amber-100"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (

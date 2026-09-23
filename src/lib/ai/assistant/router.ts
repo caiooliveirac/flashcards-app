@@ -79,7 +79,9 @@ export function routeTier(
 
   if (SIMPLE_MARKERS.some((m) => text.includes(m))) score -= 1;
 
-  if (score <= 0) return "fast";
+  // Pergunta sobre um card concreto (ex.: "Explique este card") pede raciocínio
+  // clínico ancorado no conteúdo — o rápido tende a só parafrasear o verso.
+  if (score <= 0) return opts?.hasContext ? "mid" : "fast";
   if (score <= 2) return "mid";
   return "deep";
 }
