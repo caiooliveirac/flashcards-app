@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "./motion.css";
 
+/* Refino visual 2026 — cada efeito é um arquivo isolado, gated por [data-r~="…"]
+ * (ver src/lib/refresh.ts). Comentar um @import desliga só aquele efeito. */
+@import "./refresh/type.css";
+@import "./refresh/depth.css";
+@import "./refresh/grain.css";
+@import "./refresh/halo.css";
+
 /*
  * Tokens do design system — redesign "Editorial Cognition" (handoff Claude Design).
  * Nomeação semântica mantida; valores trocados. Dark mode é tema próprio, não inversão.
@@ -294,4 +301,17 @@ h4 {
 
 .note-callout-danger {
   border-left-color: var(--color-destructive);
+}
+
+/* ============================================================
+ * Assistente (Preceptor) × doca de ações mobile.
+ * A home mobile tem uma barra fixa (z-40) marcada com [data-mobile-dock];
+ * o FAB/painel do assistente (z-50, bottom-5) subiria por cima dela.
+ * Abaixo do breakpoint sm (40rem), quando a doca existe, o assistente
+ * sobe: altura da doca (~4,5rem) + respiro de 1rem + safe area.
+ * ============================================================ */
+@media (max-width: 39.9375rem) {
+  body:has([data-mobile-dock]) [data-assistant-anchor] {
+    bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+  }
 }

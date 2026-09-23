@@ -14,11 +14,12 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin>
         <span className="hidden text-muted-foreground sm:inline">
           {session.user.email ?? session.user.name}
         </span>
         <form
+          className="hidden sm:block"
           action={async () => {
             "use server";
             await signOut({ redirectTo: "/login" });

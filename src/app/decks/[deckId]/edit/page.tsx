@@ -52,9 +52,9 @@ export default async function EditDeckPage({
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         {session.user.role === "admin" ? (
-          <Link href="/admin" className="font-semibold hover:text-primary-text">
+          <Link href="/admin" className="hidden font-semibold hover:text-primary-text sm:inline">
             Admin
           </Link>
         ) : null}
@@ -62,6 +62,7 @@ export default async function EditDeckPage({
           {session.user.email ?? session.user.name}
         </span>
         <form
+          className="hidden sm:block"
           action={async () => {
             "use server";
             await signOut({ redirectTo: "/login" });
@@ -168,6 +169,11 @@ export default async function EditDeckPage({
               <label htmlFor="desiredRetentionOverride" className={labelClass}>
                 Retenção desejada <span className="normal-case tracking-normal">(0,70 a 0,98)</span>
               </label>
+              <p className="text-sm text-muted-foreground">
+                Quanto do conteúdo você quer lembrar na hora de revisar. Mais alto
+                = revisões mais frequentes. O padrão (0,90 = 90%) serve para quase
+                todo mundo — só mexa se souber o que quer.
+              </p>
               <input
                 id="desiredRetentionOverride"
                 name="desiredRetentionOverride"

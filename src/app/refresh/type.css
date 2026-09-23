@@ -1,0 +1,11 @@
+/* ============================================================
+ * Refino 2026 · TIPOGRAFIA FLUIDA — a manchete como herói.
+ * A tela de login vira a régua: as demais mastheads sobem ao mesmo nível.
+ * Opt-in: classe .r-display no heading. Gate: [data-r~="type"] no <html>.
+ * Rollback: tire "type" da env, remova .r-display, ou apague este arquivo.
+ * ============================================================ */
+html[data-r~="type"] .r-display {
+  font-size: clamp(30px, 5.4vw, 54px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+}

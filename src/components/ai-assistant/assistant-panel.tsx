@@ -282,6 +282,7 @@ export function AssistantPanel() {
         aria-label="Abrir assistente de dúvidas"
         data-ms-magnetic="6"
         data-ms-ripple="ink"
+        data-assistant-anchor
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-amber-800 text-white shadow-lg transition hover:bg-amber-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
       >
         {/* O ✳ nunca fica parado: em repouso ele respira, e reage aos eventos. */}
@@ -291,7 +292,10 @@ export function AssistantPanel() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex h-[min(70vh,560px)] w-[min(92vw,384px)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl">
+    <div
+      data-assistant-anchor
+      className="fixed bottom-5 right-5 z-50 flex h-[min(70vh,560px)] w-[min(92vw,384px)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl"
+    >
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2.5">
           <PreceptorGlyph state={glyphState} />
@@ -440,32 +444,39 @@ export function AssistantPanel() {
         </div>
       )}
 
-      <div className="flex items-end gap-2 border-t border-stone-200 bg-white p-3">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          rows={1}
-          placeholder="Escreva sua dúvida…"
-          disabled={busy}
-          className="max-h-28 flex-1 resize-none rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={send}
-          disabled={busy || !input.trim()}
-          aria-label="Enviar"
-          data-ms-magnetic
-          data-ms-ripple="ink"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-800 text-white transition hover:bg-amber-900 disabled:opacity-40"
-        >
-          <SendIcon />
-        </button>
+      <div className="border-t border-stone-200 bg-white p-3">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            rows={1}
+            placeholder="Escreva sua dúvida…"
+            disabled={busy}
+            className="max-h-28 flex-1 resize-none rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={send}
+            disabled={busy || !input.trim()}
+            aria-label="Enviar"
+            data-ms-magnetic
+            data-ms-ripple="ink"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-800 text-white transition hover:bg-amber-900 disabled:opacity-40"
+          >
+            <SendIcon />
+          </button>
+        </div>
+        {/* Conteúdo clínico gerado por IA: sinaliza falibilidade sem alarmar. */}
+        <p className="mt-2 text-center text-[11px] leading-snug text-stone-400">
+          O Preceptor pode errar. Confirme condutas em diretrizes e fontes
+          oficiais.
+        </p>
       </div>
     </div>
   );

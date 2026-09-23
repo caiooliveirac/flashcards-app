@@ -36,7 +36,7 @@ export default async function PainelPage() {
 
   return (
     <div className="min-h-dvh">
-      <SiteHeader>
+      <SiteHeader isAdmin={session.user.role === "admin"}>
         {session.user.role === "admin" ? (
           <a href="/admin" className="hidden font-semibold underline-offset-4 hover:underline sm:inline">
             Admin
@@ -67,7 +67,7 @@ export default async function PainelPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary-text">
             Painel
           </p>
-          <h1 className="mt-3 text-[28px] font-extrabold leading-[1.08] sm:text-[40px]">
+          <h1 className="r-display mt-3 text-[28px] font-extrabold leading-[1.08] sm:text-[40px]">
             Como anda a sua memória
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
