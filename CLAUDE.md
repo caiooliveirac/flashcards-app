@@ -30,5 +30,5 @@ Procedimentos completos: `~/labctl/README.md` no servidor magalu.
 - **Limitação conhecida**: login Google no LAB exige adicionar
   `http://localhost:4060/api/auth/callback/google` no client OAuth (pendência
   humana; sem isso o login no LAB falha no redirect).
-- **Exigem aprovação explícita**: migrations em produção, reativar IA no LAB,
-  mexer no storage de mídia.
+- **Exigem aprovação explícita**: migration destrutiva, reativar IA no LAB
+  (custo), apagar mídia do storage.
