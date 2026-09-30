@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
 import { BRAND } from "@/lib/brand";
 import { AssistantMount } from "@/components/ai-assistant/assistant-mount";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { MotionRoot } from "@/lib/motion/motion-root";
 import { TrailLayer } from "@/lib/motion/trail-layer";
 import { REFRESH_FLAGS } from "@/lib/refresh";
@@ -18,6 +19,24 @@ const archivo = Archivo({
 export const metadata: Metadata = {
   title: `${BRAND}.`,
   description: "Flashcards inteligentes com revisão espaçada",
+  applicationName: `${BRAND}.`,
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: `${BRAND}.`,
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+};
+
+// theme_color muda conforme o tema (claro/escuro) do sistema.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3f2f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#181615" },
+  ],
 };
 
 export default function RootLayout({
@@ -45,6 +64,7 @@ export default function RootLayout({
         <AssistantMount />
         <MotionRoot />
         <TrailLayer />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

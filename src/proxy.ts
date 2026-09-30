@@ -22,5 +22,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
+  // Exclui assets de PWA (manifest e service worker) além do estático do Next,
+  // pra que sejam servidos sem passar pela checagem de sessão (senão redirecionam
+  // pra /login e o navegador não consegue instalar o app nem registrar o SW).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\\.png$).*)",
+  ],
 };
