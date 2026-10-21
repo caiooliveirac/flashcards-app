@@ -1,11 +1,15 @@
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { cardProgress, notes } from "@/db/schema";
 import { replaceLeech } from "@/features/assistant/service";
 import { createDeck } from "@/features/decks/service";
 import { createNote } from "@/features/notes/service";
 import { getReviewQueue } from "@/features/review/service";
 import { createTestDatabase, type TestDatabase } from "./helpers/testdb";
+
+// o service agora usa o portão de uso da IA (módulos "server-only", que o Next
+// resolve e o vitest não)
+vi.mock("server-only", () => ({}));
 
 let db: TestDatabase;
 let userA: string;

@@ -6,6 +6,7 @@ import { AI_LIMITS } from "@/lib/ai/config";
 import { auth } from "@/lib/auth";
 import {
   AssistantDisabledError,
+  AssistantRateLimitError,
   acceptSuggestion,
   proposeLeechRewrite,
   replaceLeech,
@@ -40,7 +41,7 @@ const suggestSchema = z.object({
 
 export type SuggestActionResult =
   | { ok: true; suggestions: AssistantSuggestion[] }
-  | { ok: false; reason: "auth" | "disabled" | "invalid" | "error"; message: string };
+  | { ok: false; reason: "auth" | "disabled" | "invalid" | "limit" | "error"; message: string };
 
 export async function suggestCardsAction(input: {
   sourceText: string;
@@ -57,7 +58,7 @@ export async function suggestCardsAction(input: {
     return { ok: false, reason: "invalid", message: "Cole algum texto para o assistente." };
   }
   try {
-    const suggestions = await suggestForUser(parsed.data);
+    const suggestions = await suggestForUser(userId, parsed.data);
     return { ok: true, suggestions };
   } catch (err) {
     if (err instanceof AssistantDisabledError) {
@@ -66,6 +67,9 @@ export async function suggestCardsAction(input: {
         reason: "disabled",
         message: "O assistente está indisponível no momento.",
       };
+    }
+    if (err instanceof AssistantRateLimitError) {
+      return { ok: false, reason: "limit", message: err.message };
     }
     // Sem stack trace pro usuário; só um aviso de servidor discreto.
     console.warn("[assistant] falha ao sugerir cards:", err instanceof Error ? err.message : err);
@@ -133,6 +137,7 @@ export async function proposeLeechRewriteAction(input: {
     if (err instanceof AssistantDisabledError) {
       return { ok: false, message: "O Preceptor está indisponível no momento." };
     }
+    if (err instanceof AssistantRateLimitError) return { ok: false, message: err.message };
     console.warn("[assistant] falha ao reformular leech:", err instanceof Error ? err.message : err);
     return { ok: false, message: "Não consegui reformular agora. Tente de novo." };
   }

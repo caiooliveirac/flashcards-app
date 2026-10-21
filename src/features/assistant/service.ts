@@ -3,7 +3,11 @@ import type { Tx } from "@/db/client";
 import { withUserTransaction } from "@/db/runtime";
 import { cardProgress, cards, notes } from "@/db/schema";
 import { suggestCards, type PriorCard, type SuggestMode } from "@/lib/ai/card-suggester";
-import { isAiEnabled } from "@/lib/ai/config";
+import { AI_MODEL, isAiEnabled } from "@/lib/ai/config";
+import { estimateCostUsdForModel } from "@/lib/ai/assistant/config";
+import { checkRateLimit } from "@/lib/ai/assistant/rate-limit";
+import { recordUsage } from "@/lib/ai/assistant/usage-store";
+import type { TokenUsage } from "@/lib/ai/card-suggester";
 import { rewriteLeech } from "@/lib/ai/leech-rewriter";
 import type { SuggestedCard } from "@/lib/ai/suggestion-schema";
 import { convertSuggestion } from "@/lib/ai/to-note-content";
@@ -30,16 +34,47 @@ export interface SuggestInput {
   prior?: PriorCard[];
 }
 
-export async function suggestForUser(input: SuggestInput): Promise<AssistantSuggestion[]> {
+/** Teto por minuto ou do dia atingido (mesmos limites do chat, /api/ai/chat). */
+export class AssistantRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AssistantRateLimitError";
+  }
+}
+
+/** Antes de chamar o modelo: mesmo portão do chat (rpm + teto diário). */
+async function gate(userId: string, input: { messageChars: number; contextChars: number }) {
+  const r = await checkRateLimit(userId, input);
+  if (!r.ok) throw new AssistantRateLimitError(r.message);
+}
+
+/** Depois: o gasto entra no teto diário do usuário. */
+async function charge(userId: string, usage: TokenUsage) {
+  await recordUsage(userId, {
+    ...usage,
+    costUsd: estimateCostUsdForModel(AI_MODEL, usage.inputTokens, usage.outputTokens),
+  });
+}
+
+export async function suggestForUser(
+  userId: string,
+  input: SuggestInput,
+): Promise<AssistantSuggestion[]> {
   if (!isAiEnabled()) {
     throw new AssistantDisabledError();
   }
-  const { cards } = await suggestCards({
+  // o material colado é o "contexto" (até 8000, igual ao AI_LIMITS.maxSourceChars)
+  await gate(userId, {
+    messageChars: input.feedback?.length ?? 0,
+    contextChars: input.sourceText.length,
+  });
+  const { cards, usage } = await suggestCards({
     sourceText: input.sourceText,
     mode: input.mode,
     feedback: input.feedback,
     prior: input.prior,
   });
+  await charge(userId, usage);
   return cards.map((c) => ({
     noteType: c.noteType,
     content: c.content,
@@ -176,10 +211,13 @@ export async function proposeLeechRewrite(
 ): Promise<LeechProposal> {
   if (!isAiEnabled()) throw new AssistantDisabledError();
   const card = await loadCardForAi(userId, cardId, withUserTransaction);
-  const { diagnosis, cards: converted } = await rewriteLeech({
+  // o card é do próprio usuário (já gravado): sem teto de caracteres, só rpm + dia
+  await gate(userId, { messageChars: 0, contextChars: 0 });
+  const { diagnosis, cards: converted, usage } = await rewriteLeech({
     cardText: card.cardText,
     lapses: card.lapses,
   });
+  await charge(userId, usage);
   return {
     diagnosis,
     suggestions: converted.map((c) => ({

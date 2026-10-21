@@ -28,8 +28,30 @@ export interface SuggestParams {
   prior?: PriorCard[];
 }
 
-/** Assinatura injetável: recebe prompt, devolve o JSON cru do modelo. */
-export type GenerateFn = (req: { system: string; user: string }) => Promise<string>;
+/** Tokens gastos numa chamada — alimentam o teto de custo diário. */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * Assinatura injetável: recebe prompt, devolve o JSON cru do modelo — só o
+ * texto (testes) ou texto + tokens gastos (chamada real).
+ */
+export type GenerateFn = (req: {
+  system: string;
+  user: string;
+}) => Promise<string | ({ text: string } & TokenUsage)>;
+
+/** Separa texto e uso; sem uso informado, conta zero. */
+export async function runGenerate(
+  generate: GenerateFn,
+  req: { system: string; user: string },
+): Promise<{ raw: string; usage: TokenUsage }> {
+  const out = await generate(req);
+  if (typeof out === "string") return { raw: out, usage: { inputTokens: 0, outputTokens: 0 } };
+  return { raw: out.text, usage: { inputTokens: out.inputTokens, outputTokens: out.outputTokens } };
+}
 
 const SYSTEM_PROMPT = [
   "Você é um especialista em criar flashcards para estudo com repetição espaçada (SRS).",
@@ -106,11 +128,16 @@ const defaultGenerate: GenerateFn = async ({ system, user }) => {
     messages: [{ role: "user", content: user }],
   });
   const text = res.content.find((b) => b.type === "text");
-  return text ? text.text : "";
+  return {
+    text: text ? text.text : "",
+    inputTokens: res.usage.input_tokens,
+    outputTokens: res.usage.output_tokens,
+  };
 };
 
 export interface SuggestResult {
   cards: ConvertedCard[];
+  usage: TokenUsage;
 }
 
 /**
@@ -121,7 +148,7 @@ export async function suggestCards(
   params: SuggestParams,
   generate: GenerateFn = defaultGenerate,
 ): Promise<SuggestResult> {
-  const raw = await generate({ system: SYSTEM_PROMPT, user: buildUser(params) });
+  const { raw, usage } = await runGenerate(generate, { system: SYSTEM_PROMPT, user: buildUser(params) });
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -136,5 +163,5 @@ export async function suggestCards(
     .map(convertSuggestion)
     .filter((c): c is ConvertedCard => c !== null)
     .slice(0, AI_LIMITS.maxCardsPerResponse);
-  return { cards };
+  return { cards, usage };
 }

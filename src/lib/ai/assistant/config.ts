@@ -90,3 +90,17 @@ export function estimateCostUsd(
     (outputTokens / 1_000_000) * t.priceOutPerM
   );
 }
+
+/**
+ * Custo estimado de uma chamada fora do chat (criador de cards, leech), que usa
+ * um modelo avulso (AI_MODEL). Preço do perfil com o mesmo modelo; modelo
+ * desconhecido conta como o mais caro (deep) — errar para o lado do teto.
+ */
+export function estimateCostUsdForModel(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const tier = (Object.values(TIERS).find((t) => t.model === model) ?? TIERS.deep).tier;
+  return estimateCostUsd(tier, inputTokens, outputTokens);
+}

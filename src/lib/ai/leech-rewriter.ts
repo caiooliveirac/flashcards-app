@@ -2,7 +2,7 @@ import { AI_MODEL } from "./config";
 import { getAnthropic } from "./client";
 import { SUGGESTION_JSON_SCHEMA, suggestedCardSchema } from "./suggestion-schema";
 import { convertSuggestion, type ConvertedCard } from "./to-note-content";
-import type { GenerateFn } from "./card-suggester";
+import { runGenerate, type GenerateFn, type TokenUsage } from "./card-suggester";
 import { z } from "zod";
 
 /**
@@ -65,6 +65,7 @@ const leechResponseSchema = z
 export interface LeechRewrite {
   diagnosis: string;
   cards: ConvertedCard[];
+  usage: TokenUsage;
 }
 
 export function buildLeechUser(params: { cardText: string; lapses: number }): string {
@@ -90,7 +91,11 @@ const defaultGenerate: GenerateFn = async ({ system, user }) => {
     messages: [{ role: "user", content: user }],
   });
   const text = res.content.find((b) => b.type === "text");
-  return text ? text.text : "";
+  return {
+    text: text ? text.text : "",
+    inputTokens: res.usage.input_tokens,
+    outputTokens: res.usage.output_tokens,
+  };
 };
 
 /** Lança em falha de rede/parse ou se nenhum card válido sobrar. */
@@ -98,7 +103,10 @@ export async function rewriteLeech(
   params: { cardText: string; lapses: number },
   generate: GenerateFn = defaultGenerate,
 ): Promise<LeechRewrite> {
-  const raw = await generate({ system: SYSTEM_PROMPT, user: buildLeechUser(params) });
+  const { raw, usage } = await runGenerate(generate, {
+    system: SYSTEM_PROMPT,
+    user: buildLeechUser(params),
+  });
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -112,5 +120,5 @@ export async function rewriteLeech(
     .filter((c): c is ConvertedCard => c !== null)
     .slice(0, MAX_CARDS);
   if (cards.length === 0) throw new Error("a IA não propôs nenhum card válido");
-  return { diagnosis: parsed.data.diagnosis.trim(), cards };
+  return { diagnosis: parsed.data.diagnosis.trim(), cards, usage };
 }

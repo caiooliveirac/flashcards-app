@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { isAiEnabled } from "@/lib/ai/config";
+import { checkRateLimit } from "@/lib/ai/assistant/rate-limit";
 import { createCardFromDraft } from "@/features/assistant/service";
 
 export const runtime = "nodejs";
@@ -32,6 +33,13 @@ export async function POST(request: Request) {
     body = bodySchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "requisição inválida" }, { status: 400 });
+  }
+
+  // Mesmo portão do chat (rpm + teto diário): o rascunho vem da IA e a rota é
+  // a outra metade do assistente. Não chama o modelo, então não soma custo.
+  const gate = await checkRateLimit(session.user.id, { messageChars: 0, contextChars: 0 });
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.message, code: gate.code }, { status: 429 });
   }
 
   try {
