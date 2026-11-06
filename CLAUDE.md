@@ -20,9 +20,22 @@ Procedimentos completos: `~/labctl/README.md` no servidor magalu.
   Usuário abre `http://localhost:4060` (túnel `ssh -fN magalu-lab`).
   Logs: `ssh magalu labctl lab flashcards logs`.
 - **STATUS**: `ssh magalu labctl status flashcards`.
-- **PROMOTE**: commit+push na main → `ssh magalu labctl promote flashcards`
-  (build web+worker, restart pm2, health; rollback automático). Testado 2026-07-28.
-- **ROLLBACK**: `ssh magalu labctl rollback flashcards` (restaura `.next.prev`).
+- **DEPLOY (desde 2026-11-06, sem SSH e sem runner no Mac)**: push/merge na
+  main → `deploy.yml` roda o `ci.yml` na VM do GitHub; verde, move a branch
+  `live` para o SHA. No servidor, o `auto-promote.timer` (a cada minuto) segue
+  a `live` e roda `labctl promote flashcards <sha>`: `scripts/deploy-magalu.sh
+  build` do commit alvo (deps se o lockfile mudou, migrações, `next build`),
+  `... restart` (worker esbuild + `pm2 startOrReload`), health em
+  `127.0.0.1:3060/api/health`; falhou → rollback automático. O `deploy.yml`
+  espera o `/api/health` público mostrar o SHA (`commit`). O `.env` do LIVE
+  vive só no servidor (secrets do GitHub não são mais copiados para ele).
+- **Migrações no deploy**: rodam como `flashcards_owner` só se existir
+  `~/.config/flashcards/migrate.env` (`DATABASE_URL_OWNER`, chmod 600) no
+  magalu. Sem ele, deploy que traz migração nova para antes do build.
+- **Manual/emergência**: `ssh magalu labctl promote flashcards` (origin/main,
+  sem o portão do CI). Log: `journalctl -u auto-promote -n 80`.
+- **ROLLBACK**: revert na main (passa pelo CI) ou
+  `ssh magalu labctl rollback flashcards` (restaura `.next.prev`).
 - **Banco LAB**: `ssh magalu labctl db-refresh flashcards`.
 - **No LAB, por padrão**: `ANTHROPIC_API_KEY=lab-disabled` (geração por IA não
   funciona — evita cobrança; reativar só com pedido explícito do usuário) e o

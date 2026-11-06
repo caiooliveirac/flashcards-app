@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+  # Push na main: roda como portão do deploy.yml (os testes verdes liberam o LIVE).
+  workflow_call:
 
 permissions:
   contents: read
